@@ -1,0 +1,25 @@
+[project]
+name = "local-market-agent"
+version = "0.1.0"
+description = "Address-based Korean local news, policy, and amenity impact analysis agent for real estate outlooks."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115.0",
+    "jinja2>=3.1.0",
+    "openai>=1.93.0",
+    "python-multipart>=0.0.9",
+    "truststore>=0.10.0",
+    "uvicorn[standard]>=0.30.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+]
+
+[project.scripts]
+market-agent = "market_agent.cli:main"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
