@@ -1,5 +1,6 @@
 import unittest
 
+from market_agent.agent import resolve_target
 from market_agent.analysis.rule_engine import build_report
 from market_agent.models import EvidenceItem
 
@@ -48,6 +49,9 @@ class RuleEngineTests(unittest.TestCase):
 
         self.assertLess(report.score, 50)
         self.assertTrue(report.bad_news)
+
+    def test_resolve_target_allows_apartment_only(self) -> None:
+        self.assertEqual(resolve_target("", "헬리오시티"), "헬리오시티")
 
 
 if __name__ == "__main__":

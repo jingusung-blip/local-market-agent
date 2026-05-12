@@ -17,9 +17,10 @@ class LocalMarketAgent:
 
     def analyze(self, request: AnalysisRequest) -> AnalysisReport:
         radius = validate_radius(request.radius_km)
-        location, limitations = self._geocode(request.address, request.offline)
+        target = resolve_target(request.address, request.apartment_name)
+        location, limitations = self._geocode(target, request.offline)
         context = CollectContext(
-            address=request.address,
+            address=target,
             radius_km=radius,
             apartment_name=request.apartment_name,
             location=location,
@@ -27,7 +28,7 @@ class LocalMarketAgent:
 
         evidence = self._collect(context, request.offline)
         report = build_report(
-            address=request.address,
+            address=target,
             radius_km=radius,
             location=location,
             evidence=evidence,
@@ -37,24 +38,29 @@ class LocalMarketAgent:
         if self.settings.openai_enabled and not request.offline:
             try:
                 report = OpenAIReportAnalyzer(self.settings).enhance(report)
-            except Exception as exc:  # Keep the rule-based report usable.
-                report.limitations.append(f"OpenAI 분석 코멘트 생성 실패: {exc}")
+            except Exception as exc:
+                report.limitations.append(f"AI 요약 생성 실패: {exc}")
 
         return report
 
-    def _geocode(self, address: str, offline: bool) -> tuple[GeoPoint | None, list[str]]:
+    def _geocode(self, target: str, offline: bool) -> tuple[GeoPoint | None, list[str]]:
         if offline:
-            return None, ["오프라인 모드라 주소 좌표화를 건너뛰었습니다."]
+            return None, ["오프라인 모드라 실제 좌표와 반경 데이터를 조회하지 않았습니다."]
         if not self.settings.kakao_enabled:
-            return None, ["KAKAO_REST_API_KEY가 없어 주소 좌표화를 건너뛰었습니다."]
+            return None, ["카카오 API 키가 없어 좌표와 반경 데이터를 조회하지 못했습니다."]
 
+        client = KakaoLocalClient(self.settings.kakao_rest_api_key or "")
         try:
-            point = KakaoLocalClient(self.settings.kakao_rest_api_key or "").geocode(address)
+            point = client.geocode(target)
+            if not point:
+                point = client.keyword_geocode(target)
         except Exception as exc:
-            return None, [f"카카오 주소 좌표화 실패: {exc}"]
+            return None, [f"카카오 위치 조회 실패: {exc}"]
 
         if not point:
-            return None, ["카카오 주소 검색 결과가 없습니다. 도로명주소나 지번주소를 더 구체적으로 입력하세요."]
+            return None, [
+                "입력값으로 위치를 찾지 못했습니다. 도로명주소, 지번주소, 또는 단지명을 더 구체적으로 입력하세요."
+            ]
         return point, []
 
     def _collect(self, context: CollectContext, offline: bool) -> list[EvidenceItem]:
@@ -70,7 +76,7 @@ class LocalMarketAgent:
             except Exception as exc:
                 evidence.append(
                     EvidenceItem(
-                        title="카카오 반경 시설 수집 실패",
+                        title="반경 생활 인프라 수집 실패",
                         summary=str(exc),
                         source="System",
                         category="risk",
@@ -90,7 +96,7 @@ class LocalMarketAgent:
             except Exception as exc:
                 evidence.append(
                     EvidenceItem(
-                        title="네이버 뉴스/정책 수집 실패",
+                        title="뉴스/정책 수집 실패",
                         summary=str(exc),
                         source="System",
                         category="risk",
@@ -103,7 +109,19 @@ class LocalMarketAgent:
         return evidence
 
 
+def resolve_target(address: str | None, apartment_name: str | None) -> str:
+    clean_address = (address or "").strip()
+    clean_apartment = (apartment_name or "").strip()
+    if clean_address and clean_apartment:
+        return f"{clean_address} {clean_apartment}"
+    if clean_address:
+        return clean_address
+    if clean_apartment:
+        return clean_apartment
+    raise ValueError("주소 또는 아파트 단지명 중 하나는 입력해야 합니다.")
+
+
 def validate_radius(radius_km: float) -> float:
     if radius_km < 2 or radius_km > 5:
-        raise ValueError("반경은 2km 이상 5km 이하로 입력해야 합니다.")
+        raise ValueError("분석 반경은 2km 이상 5km 이하로 입력해야 합니다.")
     return round(radius_km, 2)

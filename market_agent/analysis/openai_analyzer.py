@@ -35,13 +35,13 @@ class OpenAIReportAnalyzer:
         response = client.responses.create(
             model=self.settings.openai_model,
             reasoning={"effort": "low"},
-            max_output_tokens=700,
+            max_output_tokens=420,
             text={"verbosity": "low"},
             instructions=(
-                "You are a Korean real estate market analyst. "
-                "Use only the supplied evidence. Do not guarantee prices. "
-                "Return concise Korean commentary with four short sections: "
-                "핵심 결론, 상승 요인, 하방 리스크, 추가 확인 필요 데이터."
+                "너는 한국 부동산 입지·상권 분석가다. 제공된 근거만 사용한다. "
+                "가격을 보장하지 말고, 투자 조언처럼 단정하지 않는다. "
+                "한국어로 4문장 이내의 핵심 인사이트만 작성한다. "
+                "형식: 1) 한줄 결론 2) 상승동력 3) 주의변수 4) 추가확인."
             ),
             input=json.dumps(payload, ensure_ascii=False),
         )
@@ -53,10 +53,10 @@ def compact_report_payload(report: AnalysisReport) -> dict[str, Any]:
         report.evidence,
         key=lambda item: (abs(item.impact) * item.reliability, item.reliability),
         reverse=True,
-    )[:12]
+    )[:10]
 
     return {
-        "address": report.address,
+        "target": report.address,
         "radius_km": report.radius_km,
         "score": report.score,
         "price_outlook": report.price_outlook,
@@ -64,15 +64,15 @@ def compact_report_payload(report: AnalysisReport) -> dict[str, Any]:
         "summary": report.summary,
         "location": report.location.__dict__ if report.location else None,
         "signals": {
-            "good_news": [signal.__dict__ for signal in report.good_news[:3]],
-            "bad_news": [signal.__dict__ for signal in report.bad_news[:3]],
-            "policy_signals": [signal.__dict__ for signal in report.policy_signals[:3]],
-            "local_factors": [signal.__dict__ for signal in report.local_factors[:3]],
+            "good_news": [signal.__dict__ for signal in report.good_news[:2]],
+            "bad_news": [signal.__dict__ for signal in report.bad_news[:2]],
+            "policy_signals": [signal.__dict__ for signal in report.policy_signals[:2]],
+            "local_factors": [signal.__dict__ for signal in report.local_factors[:2]],
         },
         "evidence": [
             {
-                "title": item.title[:140],
-                "summary": item.summary[:220],
+                "title": item.title[:120],
+                "summary": item.summary[:180],
                 "source": item.source,
                 "category": item.category,
                 "sentiment": item.sentiment,

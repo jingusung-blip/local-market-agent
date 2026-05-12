@@ -49,6 +49,26 @@ class KakaoLocalClient:
             source="kakao",
         )
 
+    def keyword_geocode(self, query: str) -> GeoPoint | None:
+        payload = self._get("/v2/local/search/keyword.json", {"query": query, "size": 1})
+        documents = payload.get("documents", [])
+        if not documents:
+            return None
+
+        first = documents[0]
+        address = (
+            first.get("road_address_name")
+            or first.get("address_name")
+            or first.get("place_name")
+            or query
+        )
+        return GeoPoint(
+            address=address,
+            latitude=float(first["y"]),
+            longitude=float(first["x"]),
+            source="kakao-keyword",
+        )
+
     def search_category(
         self,
         category_group_code: str,

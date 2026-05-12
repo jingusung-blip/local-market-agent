@@ -43,7 +43,7 @@ class AnalysisSignal:
 
 @dataclass
 class AnalysisRequest:
-    address: str
+    address: str = ""
     radius_km: float = 3.0
     apartment_name: str | None = None
     offline: bool = False

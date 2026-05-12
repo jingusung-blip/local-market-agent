@@ -31,7 +31,7 @@ def index(request: Request) -> HTMLResponse:
 @app.post("/analyze", response_class=HTMLResponse)
 def analyze(
     request: Request,
-    address: str = Form(...),
+    address: str = Form(""),
     radius_km: float = Form(3.0),
     apartment_name: str = Form(""),
     offline: bool = Form(False),

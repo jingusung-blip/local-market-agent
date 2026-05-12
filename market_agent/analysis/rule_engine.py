@@ -38,14 +38,14 @@ def build_report(
     report_limitations = list(limitations or [])
     if not location:
         report_limitations.append(
-            "주소 좌표화가 되지 않아 실제 반경 기반 시설 수집은 수행하지 못했습니다."
+            "위치 좌표가 없어 실제 반경 기반 생활 인프라 수집은 제한되었습니다."
         )
     if not any(item.category in {"news", "policy"} for item in evidence):
         report_limitations.append(
-            "뉴스/정책 API 결과가 없어 공개 검색 기반 이슈 반영이 제한적입니다."
+            "뉴스/정책 검색 결과가 없어 공개 이슈 반영이 제한적입니다."
         )
     if any(item.source == "Demo" for item in evidence):
-        report_limitations.append("현재 결과에는 API 키 없이 생성한 데모 데이터가 포함되어 있습니다.")
+        report_limitations.append("API 키 없이 생성한 데모 데이터가 포함되어 있습니다.")
 
     return AnalysisReport(
         address=address,
@@ -158,9 +158,8 @@ def make_summary(
     risk_count = len(bad_news)
     policy_count = len(policy_signals)
     return (
-        f"종합 점수는 {score}점이며 전망은 '{outlook}'입니다. "
-        f"긍정 신호 {positive_count}개, 리스크 신호 {risk_count}개, "
-        f"정책 신호 {policy_count}개가 핵심 근거로 잡혔습니다."
+        f"종합 점수는 {score}점, 전망은 '{outlook}'입니다. "
+        f"상승 신호 {positive_count}개, 리스크 {risk_count}개, 정책 변수 {policy_count}개를 반영했습니다."
     )
 
 
