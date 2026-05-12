@@ -4,71 +4,115 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>주변 상권/정책 영향 분석</title>
-    <link rel="stylesheet" href="{{ url_for('static', path='styles.css') }}" />
+    <link rel="stylesheet" href="{{ url_for('static', path='styles.css') }}?v=ok-bank-20260512" />
   </head>
   <body>
+    <header class="topbar">
+      <a class="brand" href="/">
+        <span class="brand-mark">M</span>
+        <span>
+          <strong>Market Insight</strong>
+          <small>지역 호재·정책 영향 분석</small>
+        </span>
+      </a>
+      <nav class="top-actions" aria-label="빠른 메뉴">
+        <a href="#analysis-form">주소 분석</a>
+        <a href="#result">리포트</a>
+      </nav>
+    </header>
+
     <main class="shell">
+      <section class="hero-band">
+        <div class="hero-copy">
+          <p class="eyebrow">Real Estate Signal Desk</p>
+          <h1>주소 하나로 주변 호재와 리스크를 한 번에 확인하세요.</h1>
+          <p>
+            카카오 반경 데이터, 네이버 뉴스·정책 검색, AI 코멘트를 모아
+            가격 영향 신호를 리포트로 정리합니다.
+          </p>
+        </div>
+        <div class="hero-visual" aria-hidden="true">
+          <div class="radar">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+          <div class="map-line line-a"></div>
+          <div class="map-line line-b"></div>
+          <div class="map-pin">3km</div>
+        </div>
+      </section>
+
       <section class="workspace">
-        <form class="panel input-panel" action="/analyze" method="post">
-          <div>
-            <p class="eyebrow">Local Market Agent</p>
-            <h1>주소 기반 미래 가격 영향 분석</h1>
+        <aside class="input-panel" id="analysis-form">
+          <div class="panel-heading">
+            <p class="eyebrow">Search</p>
+            <h2>분석 조건</h2>
           </div>
 
-          <label>
-            주소
-            <input
-              name="address"
-              value="{{ form.address }}"
-              placeholder="예: 서울특별시 강남구 테헤란로 152"
-              required
-            />
-          </label>
+          <form action="/analyze" method="post">
+            <label>
+              주소
+              <input
+                name="address"
+                value="{{ form.address }}"
+                placeholder="예: 서울특별시 강남구 테헤란로 152"
+                required
+              />
+            </label>
 
-          <label>
-            아파트 단지명
-            <input
-              name="apartment_name"
-              value="{{ form.apartment_name }}"
-              placeholder="예: 역삼래미안"
-            />
-          </label>
+            <label>
+              아파트 단지명
+              <input
+                name="apartment_name"
+                value="{{ form.apartment_name }}"
+                placeholder="예: 역삼래미안"
+              />
+            </label>
 
-          <label>
-            분석 반경
-            <input
-              type="range"
-              name="radius_km"
-              min="2"
-              max="5"
-              step="0.5"
-              value="{{ form.radius_km }}"
-              oninput="this.nextElementSibling.value = this.value + 'km'"
-            />
-            <output>{{ form.radius_km }}km</output>
-          </label>
+            <label>
+              분석 반경
+              <input
+                type="range"
+                name="radius_km"
+                min="2"
+                max="5"
+                step="0.5"
+                value="{{ form.radius_km }}"
+                oninput="this.nextElementSibling.value = this.value + 'km'"
+              />
+              <output>{{ form.radius_km }}km</output>
+            </label>
 
-          <label class="check">
-            <input type="checkbox" name="offline" {% if form.offline %}checked{% endif %} />
-            <span>오프라인 데모 모드</span>
-          </label>
+            <label class="check">
+              <input type="checkbox" name="offline" {% if form.offline %}checked{% endif %} />
+              <span>오프라인 데모 모드</span>
+            </label>
 
-          <button type="submit">분석 실행</button>
-        </form>
+            <button class="primary-button" type="submit">
+              <span>분석 실행</span>
+              <span aria-hidden="true">›</span>
+            </button>
+          </form>
+        </aside>
 
-        <section class="panel result-panel">
+        <section class="result-panel" id="result">
           {% if error %}
             <div class="error">{{ error }}</div>
           {% elif report %}
-            <div class="score-row">
+            <div class="result-header">
               <div>
                 <p class="eyebrow">Outlook</p>
                 <h2>{{ report.price_outlook }}</h2>
+                <p>{{ report.summary }}</p>
               </div>
-              <div class="score">{{ report.score }}</div>
+              <div class="score-badge">
+                <span>{{ report.score }}</span>
+                <small>score</small>
+              </div>
             </div>
-            <p class="summary">{{ report.summary }}</p>
-            <div class="meta-grid">
+
+            <div class="metric-strip">
               <div>
                 <span>신뢰도</span>
                 <strong>{{ (report.confidence * 100) | round | int }}%</strong>
@@ -84,15 +128,21 @@
             </div>
 
             {% if report.llm_commentary %}
-              <section class="section-block">
-                <h3>AI 코멘트</h3>
+              <section class="section-block ai-block">
+                <div class="section-title">
+                  <p class="eyebrow">AI Commentary</p>
+                  <h3>AI 코멘트</h3>
+                </div>
                 <p>{{ report.llm_commentary }}</p>
               </section>
             {% endif %}
 
             <div class="signal-grid">
               <section class="section-block">
-                <h3>호재</h3>
+                <div class="section-title">
+                  <p class="eyebrow">Good</p>
+                  <h3>호재</h3>
+                </div>
                 {% for signal in report.good_news %}
                   <article class="signal positive">
                     <strong>{{ signal.name }}</strong>
@@ -104,7 +154,10 @@
               </section>
 
               <section class="section-block">
-                <h3>악재</h3>
+                <div class="section-title">
+                  <p class="eyebrow">Risk</p>
+                  <h3>악재</h3>
+                </div>
                 {% for signal in report.bad_news %}
                   <article class="signal negative">
                     <strong>{{ signal.name }}</strong>
@@ -116,7 +169,10 @@
               </section>
 
               <section class="section-block">
-                <h3>정책</h3>
+                <div class="section-title">
+                  <p class="eyebrow">Policy</p>
+                  <h3>정책</h3>
+                </div>
                 {% for signal in report.policy_signals %}
                   <article class="signal policy">
                     <strong>{{ signal.name }}</strong>
@@ -128,7 +184,10 @@
               </section>
 
               <section class="section-block">
-                <h3>생활 인프라</h3>
+                <div class="section-title">
+                  <p class="eyebrow">Infra</p>
+                  <h3>생활 인프라</h3>
+                </div>
                 {% for signal in report.local_factors %}
                   <article class="signal amenity">
                     <strong>{{ signal.name }}</strong>
@@ -140,17 +199,25 @@
               </section>
             </div>
 
-            <section class="section-block">
-              <h3>한계</h3>
-              <ul class="limitations">
-                {% for item in report.limitations %}
-                  <li>{{ item }}</li>
-                {% endfor %}
-              </ul>
-            </section>
+            {% if report.limitations %}
+              <section class="section-block">
+                <div class="section-title">
+                  <p class="eyebrow">Note</p>
+                  <h3>한계</h3>
+                </div>
+                <ul class="limitations">
+                  {% for item in report.limitations %}
+                    <li>{{ item }}</li>
+                  {% endfor %}
+                </ul>
+              </section>
+            {% endif %}
           {% else %}
             <div class="empty-state">
-              <p>주소와 반경을 입력하면 근거 기반 분석 결과가 여기에 표시됩니다.</p>
+              <div class="empty-visual" aria-hidden="true"></div>
+              <p class="eyebrow">Ready</p>
+              <h2>분석할 주소를 입력하세요.</h2>
+              <p>반경과 단지명을 함께 입력하면 더 구체적인 리포트를 만들 수 있습니다.</p>
             </div>
           {% endif %}
         </section>
