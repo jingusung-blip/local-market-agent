@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 
 from market_agent.models import (
     AnalysisReport,
@@ -115,7 +117,7 @@ def signals_from_evidence(items: list[EvidenceItem], limit: int = 5) -> list[Ana
         impact = round(sum(item.impact * item.reliability for item in group), 2)
         confidence = round(min(0.9, 0.35 + len(group) * 0.08 + average_reliability(group) * 0.25), 2)
         sentiment = strongest_sentiment(group)
-        top = sorted(group, key=lambda item: abs(item.impact), reverse=True)[0]
+        top = sorted(group, key=evidence_priority, reverse=True)[0]
         urls = [item.url for item in group if item.url][:3]
         signals.append(
             AnalysisSignal(
@@ -171,3 +173,30 @@ def dedupe(values: list[str]) -> list[str]:
             seen.add(value)
             result.append(value)
     return result
+
+
+def evidence_priority(item: EvidenceItem) -> tuple[datetime, float]:
+    return (
+        parse_evidence_date(item.published_at) or datetime.min.replace(tzinfo=timezone.utc),
+        abs(item.impact) * item.reliability,
+    )
+
+
+def parse_evidence_date(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    text = value.strip()
+    if not text:
+        return None
+    if len(text) == 8 and text.isdigit():
+        try:
+            return datetime.strptime(text, "%Y%m%d").replace(tzinfo=timezone.utc)
+        except ValueError:
+            return None
+    try:
+        parsed = parsedate_to_datetime(text)
+    except (TypeError, ValueError):
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)

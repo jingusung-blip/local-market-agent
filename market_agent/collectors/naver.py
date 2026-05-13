@@ -5,6 +5,8 @@ import re
 import urllib.error
 import urllib.parse
 import urllib.request
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from typing import Any
 
 from market_agent.collectors.base import CollectContext
@@ -13,6 +15,9 @@ from market_agent.models import EvidenceItem
 
 
 TAG_RE = re.compile(r"<[^>]+>")
+COMPACT_DATE_RE = re.compile(r"^\d{8}$")
+MAX_NEWS_AGE_DAYS = 730
+NEWS_FETCH_MULTIPLIER = 2
 
 
 GOOD_QUERIES = [
@@ -93,9 +98,15 @@ def clean_html(value: str | None) -> str:
 
 
 class NaverNewsPolicyCollector:
-    def __init__(self, client: NaverSearchClient, per_query: int = 5) -> None:
+    def __init__(
+        self,
+        client: NaverSearchClient,
+        per_query: int = 5,
+        max_news_age_days: int = MAX_NEWS_AGE_DAYS,
+    ) -> None:
         self.client = client
         self.per_query = per_query
+        self.max_news_age_days = max_news_age_days
 
     def collect(self, context: CollectContext) -> list[EvidenceItem]:
         evidence: list[EvidenceItem] = []
@@ -127,12 +138,18 @@ class NaverNewsPolicyCollector:
                 )
             )
 
-        return evidence
+        return sort_evidence_by_recency(evidence)
 
     def _collect_news_query(
         self, query: str, default_sentiment: str, seen: set[str]
     ) -> list[EvidenceItem]:
-        items = self.client.news(query, display=self.per_query)
+        display = max(self.per_query, min(20, self.per_query * NEWS_FETCH_MULTIPLIER))
+        items = [
+            item
+            for item in self.client.news(query, display=display)
+            if is_recent_news_item(item, self.max_news_age_days)
+        ]
+        items = sort_items_by_recency(items)[: self.per_query]
         return [
             self._to_evidence(item, "news", "Naver News", default_sentiment, seen)
             for item in items
@@ -162,6 +179,14 @@ class NaverNewsPolicyCollector:
         text = f"{title} {summary}"
         sentiment, tags = classify_sentiment(text, default_sentiment)
         link = item.get("originallink") or item.get("link")
+        published_at = str(item.get("pubDate") or item.get("postdate") or "")
+        published_date = parse_search_date(published_at)
+        reliability = 0.72 if category == "news" else 0.68
+        impact = estimate_impact(text, category, default_sentiment)
+        if category == "news":
+            multiplier = recency_multiplier(published_date)
+            reliability = round(min(0.9, reliability * multiplier), 2)
+            impact = round(max(-6.0, min(6.0, impact * multiplier)), 2)
         return EvidenceItem(
             title=title or "(제목 없음)",
             summary=summary,
@@ -169,12 +194,90 @@ class NaverNewsPolicyCollector:
             category=category,
             sentiment=sentiment,
             url=link,
-            published_at=item.get("pubDate"),
-            reliability=0.72 if category == "news" else 0.68,
-            impact=estimate_impact(text, category, default_sentiment),
+            published_at=published_at or None,
+            reliability=reliability,
+            impact=impact,
             tags=tags,
         )
 
     @staticmethod
     def _dedupe_key(item: dict[str, Any]) -> str:
         return str(item.get("originallink") or item.get("link") or item.get("title"))
+
+
+def parse_search_date(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    text = value.strip()
+    if not text:
+        return None
+    if COMPACT_DATE_RE.match(text):
+        try:
+            return datetime.strptime(text, "%Y%m%d").replace(tzinfo=timezone.utc)
+        except ValueError:
+            return None
+    try:
+        parsed = parsedate_to_datetime(text)
+    except (TypeError, ValueError):
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def item_published_at(item: dict[str, Any]) -> datetime | None:
+    return parse_search_date(str(item.get("pubDate") or item.get("postdate") or ""))
+
+
+def age_days(published_at: datetime, now: datetime | None = None) -> int:
+    current = now or datetime.now(timezone.utc)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=timezone.utc)
+    current = current.astimezone(timezone.utc)
+    published = published_at.astimezone(timezone.utc)
+    return max(0, (current - published).days)
+
+
+def is_recent_news_item(
+    item: dict[str, Any],
+    max_age_days: int = MAX_NEWS_AGE_DAYS,
+    now: datetime | None = None,
+) -> bool:
+    published_at = item_published_at(item)
+    if not published_at:
+        return False
+    return age_days(published_at, now) <= max_age_days
+
+
+def recency_multiplier(published_at: datetime | None, now: datetime | None = None) -> float:
+    if not published_at:
+        return 0.85
+    days = age_days(published_at, now)
+    if days <= 30:
+        return 1.15
+    if days <= 180:
+        return 1.08
+    if days <= 365:
+        return 1.0
+    if days <= MAX_NEWS_AGE_DAYS:
+        return 0.82
+    return 0.45
+
+
+def sort_items_by_recency(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return sorted(
+        items,
+        key=lambda item: item_published_at(item) or datetime.min.replace(tzinfo=timezone.utc),
+        reverse=True,
+    )
+
+
+def sort_evidence_by_recency(items: list[EvidenceItem]) -> list[EvidenceItem]:
+    return sorted(
+        items,
+        key=lambda item: (
+            parse_search_date(item.published_at) or datetime.min.replace(tzinfo=timezone.utc),
+            abs(item.impact) * item.reliability,
+        ),
+        reverse=True,
+    )
