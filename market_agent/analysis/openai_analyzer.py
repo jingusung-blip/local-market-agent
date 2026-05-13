@@ -35,7 +35,7 @@ class OpenAIReportAnalyzer:
         response = client.responses.create(
             model=self.settings.openai_model,
             reasoning={"effort": "low"},
-            max_output_tokens=420,
+            max_output_tokens=260,
             text={"verbosity": "low"},
             instructions=(
                 "너는 한국 부동산 입지·상권 분석가다. 제공된 근거만 사용한다. "
@@ -53,7 +53,7 @@ def compact_report_payload(report: AnalysisReport) -> dict[str, Any]:
         report.evidence,
         key=lambda item: (abs(item.impact) * item.reliability, item.reliability),
         reverse=True,
-    )[:10]
+    )[:6]
 
     return {
         "target": report.address,
@@ -64,15 +64,15 @@ def compact_report_payload(report: AnalysisReport) -> dict[str, Any]:
         "summary": report.summary,
         "location": report.location.__dict__ if report.location else None,
         "signals": {
-            "good_news": [signal.__dict__ for signal in report.good_news[:2]],
-            "bad_news": [signal.__dict__ for signal in report.bad_news[:2]],
-            "policy_signals": [signal.__dict__ for signal in report.policy_signals[:2]],
-            "local_factors": [signal.__dict__ for signal in report.local_factors[:2]],
+            "good_news": [signal.__dict__ for signal in report.good_news[:1]],
+            "bad_news": [signal.__dict__ for signal in report.bad_news[:1]],
+            "policy_signals": [signal.__dict__ for signal in report.policy_signals[:1]],
+            "local_factors": [signal.__dict__ for signal in report.local_factors[:1]],
         },
         "evidence": [
             {
-                "title": item.title[:120],
-                "summary": item.summary[:180],
+                "title": item.title[:90],
+                "summary": item.summary[:120],
                 "source": item.source,
                 "category": item.category,
                 "sentiment": item.sentiment,

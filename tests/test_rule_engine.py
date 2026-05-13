@@ -1,6 +1,6 @@
 import unittest
 
-from market_agent.agent import resolve_target
+from market_agent.agent import friendly_ai_error_message, resolve_target
 from market_agent.analysis.rule_engine import build_report
 from market_agent.models import EvidenceItem
 
@@ -52,6 +52,12 @@ class RuleEngineTests(unittest.TestCase):
 
     def test_resolve_target_allows_apartment_only(self) -> None:
         self.assertEqual(resolve_target("", "헬리오시티"), "헬리오시티")
+
+    def test_friendly_ai_rate_limit_message_hides_raw_error(self) -> None:
+        message = friendly_ai_error_message(Exception("Error code: 429 - rate_limit_exceeded"))
+
+        self.assertIn("OpenAI 사용량 제한", message)
+        self.assertNotIn("rate_limit_exceeded", message)
 
 
 if __name__ == "__main__":

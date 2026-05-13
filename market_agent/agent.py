@@ -39,7 +39,7 @@ class LocalMarketAgent:
             try:
                 report = OpenAIReportAnalyzer(self.settings).enhance(report)
             except Exception as exc:
-                report.limitations.append(f"AI 요약 생성 실패: {exc}")
+                report.limitations.append(friendly_ai_error_message(exc))
 
         return report
 
@@ -125,3 +125,16 @@ def validate_radius(radius_km: float) -> float:
     if radius_km < 2 or radius_km > 5:
         raise ValueError("분석 반경은 2km 이상 5km 이하로 입력해야 합니다.")
     return round(radius_km, 2)
+
+
+def friendly_ai_error_message(exc: Exception) -> str:
+    text = str(exc).lower()
+    error_name = type(exc).__name__.lower()
+    if "429" in text or "rate_limit" in text or "ratelimit" in error_name:
+        return (
+            "AI 요약은 OpenAI 사용량 제한으로 잠시 생성하지 못했습니다. "
+            "기본 입지 분석은 정상 처리되었고, 몇 초 뒤 다시 분석하면 요약이 붙을 수 있습니다."
+        )
+    if "api key" in text or "authentication" in text or "unauthorized" in text:
+        return "AI 요약은 OpenAI API 키 확인이 필요해 생성하지 못했습니다. 기본 입지 분석은 정상 처리되었습니다."
+    return "AI 요약은 일시적인 외부 API 문제로 생성하지 못했습니다. 기본 입지 분석은 정상 처리되었습니다."
