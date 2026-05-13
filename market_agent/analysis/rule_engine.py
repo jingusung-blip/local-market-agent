@@ -12,6 +12,14 @@ from market_agent.models import (
 )
 
 
+NO_EVIDENCE_SCORE = 45
+BASE_INVESTMENT_SCORE = 48
+AMENITY_POSITIVE_CAP = 5.0
+NEWS_POSITIVE_CAP = 12.0
+POLICY_POSITIVE_CAP = 8.0
+OTHER_POSITIVE_CAP = 5.0
+
+
 def build_report(
     address: str,
     radius_km: float,
@@ -68,14 +76,93 @@ def build_report(
 
 def calculate_score(evidence: list[EvidenceItem]) -> int:
     if not evidence:
-        return 50
+        return NO_EVIDENCE_SCORE
 
-    weighted_total = 0.0
+    positive_totals = {
+        "amenity": 0.0,
+        "news": 0.0,
+        "policy": 0.0,
+        "other": 0.0,
+    }
+    negative_total = 0.0
     for item in evidence:
-        weighted_total += item.impact * max(0.1, min(item.reliability, 1.0))
+        contribution = evidence_contribution(item)
+        if contribution >= 0:
+            positive_totals[score_category(item)] += contribution
+        else:
+            negative_total += contribution
 
-    score = 50 + weighted_total
+    capped_positive_total = (
+        min(AMENITY_POSITIVE_CAP, positive_totals["amenity"])
+        + min(NEWS_POSITIVE_CAP, positive_totals["news"])
+        + min(POLICY_POSITIVE_CAP, positive_totals["policy"])
+        + min(OTHER_POSITIVE_CAP, positive_totals["other"])
+    )
+
+    score = BASE_INVESTMENT_SCORE + capped_positive_total + negative_total
+    score -= uncertainty_penalty(evidence)
+    score = apply_investment_caps(score, evidence)
     return int(round(max(0, min(100, score))))
+
+
+def evidence_contribution(item: EvidenceItem) -> float:
+    weighted = item.impact * clamp_reliability(item.reliability)
+    if weighted >= 0:
+        if item.category == "amenity":
+            return weighted * 0.38
+        if item.category == "policy":
+            return weighted * 0.65
+        return weighted * 0.70
+
+    if item.category == "risk":
+        return weighted * 1.35
+    if item.category == "policy":
+        return weighted * 1.20
+    return weighted * 1.20
+
+
+def score_category(item: EvidenceItem) -> str:
+    if item.category in {"amenity", "news", "policy"}:
+        return item.category
+    return "other"
+
+
+def clamp_reliability(value: float) -> float:
+    return max(0.1, min(value, 1.0))
+
+
+def uncertainty_penalty(evidence: list[EvidenceItem]) -> float:
+    penalty = 0.0
+    if len(evidence) < 4:
+        penalty += 2.0
+    if not any(item.category in {"news", "policy"} for item in evidence):
+        penalty += 4.0
+    if any(item.source == "Demo" for item in evidence):
+        penalty += 3.0
+    return penalty
+
+
+def apply_investment_caps(score: float, evidence: list[EvidenceItem]) -> float:
+    has_market_signal = any(item.category in {"news", "policy"} for item in evidence)
+    has_positive_market_signal = any(
+        item.category in {"news", "policy"} and evidence_contribution(item) > 0
+        for item in evidence
+    )
+    has_policy_signal = any(item.category == "policy" for item in evidence)
+    has_risk_signal = any(
+        item.sentiment == "negative" or item.category == "risk" or evidence_contribution(item) < 0
+        for item in evidence
+    )
+
+    if not has_market_signal:
+        score = min(score, 55)
+    if not has_positive_market_signal:
+        score = min(score, 60)
+    if not has_policy_signal:
+        score = min(score, 68)
+    if not has_risk_signal:
+        score = min(score, 69)
+    return score
 
 
 def calculate_confidence(evidence: list[EvidenceItem], location: GeoPoint | None) -> float:
@@ -95,13 +182,13 @@ def calculate_confidence(evidence: list[EvidenceItem], location: GeoPoint | None
 
 
 def outlook_label(score: int) -> str:
-    if score >= 70:
+    if score >= 72:
         return "상승 우호 신호 강함"
-    if score >= 58:
+    if score >= 63:
         return "완만한 상승 우호"
-    if score >= 43:
-        return "중립 또는 혼재"
-    if score >= 32:
+    if score >= 46:
+        return "중립 또는 추가 검증"
+    if score >= 34:
         return "하방 리스크 우세"
     return "주의 필요"
 
@@ -114,7 +201,7 @@ def signals_from_evidence(items: list[EvidenceItem], limit: int = 5) -> list[Ana
 
     signals: list[AnalysisSignal] = []
     for name, group in grouped.items():
-        impact = round(sum(item.impact * item.reliability for item in group), 2)
+        impact = round(sum(evidence_contribution(item) for item in group), 2)
         confidence = round(min(0.9, 0.35 + len(group) * 0.08 + average_reliability(group) * 0.25), 2)
         sentiment = strongest_sentiment(group)
         top = sorted(group, key=evidence_priority, reverse=True)[0]
@@ -160,7 +247,7 @@ def make_summary(
     risk_count = len(bad_news)
     policy_count = len(policy_signals)
     return (
-        f"종합 점수는 {score}점, 전망은 '{outlook}'입니다. "
+        f"종합 점수는 {score}점, 보수 전망은 '{outlook}'입니다. "
         f"상승 신호 {positive_count}개, 리스크 {risk_count}개, 정책 변수 {policy_count}개를 반영했습니다."
     )
 
