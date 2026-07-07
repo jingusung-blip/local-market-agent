@@ -114,6 +114,23 @@
               <h3>한눈 인사이트</h3>
             </div>
             <div class="insight-list">
+              {% if report.market_signals %}
+                <details class="insight-item">
+                  <summary>
+                    <span class="chip market">실거래가</span>
+                    <strong>최근 거래 동향</strong>
+                    <p>{{ report.market_signals[0].rationale }}</p>
+                    <span class="expand-mark" aria-hidden="true"></span>
+                  </summary>
+                  <div class="insight-detail">
+                    <div class="detail-metrics">
+                      <div><span>영향도</span><strong>{{ report.market_signals[0].impact }}</strong></div>
+                      <div><span>신뢰도</span><strong>{{ (report.market_signals[0].confidence * 100) | round | int }}%</strong></div>
+                    </div>
+                    <p>국토부 아파트매매 실거래 공개 자료를 직접 집계한 값으로, 뉴스/정책 키워드 기반 신호보다 신뢰도가 높습니다. 다만 반경이 아닌 동/단지 단위 표본이라 거래량이 적은 시기에는 변동폭이 커질 수 있습니다.</p>
+                  </div>
+                </details>
+              {% endif %}
               <details class="insight-item">
                 <summary>
                   <span class="chip up">상승동력</span>

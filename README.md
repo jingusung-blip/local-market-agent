@@ -4,13 +4,14 @@
 
 ## 현재 구현된 흐름
 
-1. 주소를 카카오 로컬 API로 좌표화합니다.
+1. 주소를 카카오 로컬 API로 좌표화합니다 (법정동코드/구·동 정보도 함께 확보합니다).
 2. 카카오 로컬 API로 반경 내 지하철역, 학교, 병원, 대형마트, 문화시설 등 생활 인프라를 집계합니다.
-3. 네이버 검색 API로 주소/단지명 기반 뉴스, 정책, 악재 키워드를 수집합니다.
-4. 수집된 근거를 긍정/부정/정책/생활 인프라로 분류하고 0~100점 전망 점수를 냅니다.
-5. `OPENAI_API_KEY`가 있으면 OpenAI Responses API로 분석 코멘트를 추가합니다.
+3. 네이버 검색 API로 주소/단지명 기반 뉴스, 정책, 악재 키워드를 수집합니다. 좌표에서 얻은 구/동 이름을 검색어에 함께 넣고, 결과 본문에 그 지역명이 없으면 신뢰도를 낮춰 동명이인 단지(예: 여러 도시의 "자이", "래미안") 오탐을 줄입니다.
+4. `MOLIT_API_KEY`가 있으면 국토교통부 아파트매매 실거래 자료로 최근 3개월과 직전 3개월의 평균 실거래가를 비교해 실제 가격 추세 신호를 추가합니다.
+5. 수집된 근거를 긍정/부정/정책/생활 인프라/실거래가로 분류하고, 정비사업 관련 근거는 진행 단계(조합설립~착공/준공)에 따라 가중치를 다르게 반영해 0~100점 전망 점수를 냅니다.
+6. `OPENAI_API_KEY`가 있으면 OpenAI Responses API로 분석 코멘트를 추가합니다.
 
-뉴스/정책 검색은 키워드 기반입니다. 카카오 시설 수집은 좌표와 반경을 사용하지만, 네이버 뉴스/웹 검색 결과 자체는 엄밀한 거리 필터가 아닙니다. 리포트의 `limitations`에 이 차이를 명시합니다.
+뉴스/정책 검색은 키워드 기반이며, 부정 키워드 주변에 "해소/완화/없음" 같은 표현이 있으면 리스크가 해소된 것으로 보정합니다. 카카오 시설 수집은 좌표와 반경을 사용하지만, 네이버 뉴스/웹 검색 결과 자체는 엄밀한 거리 필터가 아니라 지역명 매칭에 의존합니다. 리포트의 `limitations`에 이 차이를 명시합니다.
 
 ## 설치
 
@@ -26,6 +27,7 @@ Copy-Item .env.example .env
 - `KAKAO_REST_API_KEY`: 주소 좌표화와 반경 내 시설 수집
 - `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET`: 뉴스/정책 수집
 - `OPENAI_API_KEY`: 선택 사항, LLM 분석 코멘트
+- `MOLIT_API_KEY`: 선택 사항이지만 강력 권장. 실제 실거래가 반영 (data.go.kr에서 "국토교통부_아파트매매 실거래자료" 검색 후 활용신청)
 
 ## 실행
 
@@ -61,6 +63,7 @@ python -m market_agent.cli "서울특별시 강남구 테헤란로 152" --radius
    - `NAVER_CLIENT_SECRET`
    - `OPENAI_API_KEY`
    - `OPENAI_MODEL`: 기본값 `gpt-5.4-mini`
+   - `MOLIT_API_KEY`: 선택 사항, 실거래가 반영
 4. 배포가 끝나면 Render가 제공하는 `https://...onrender.com` URL로 접속합니다.
 
 로컬의 `.env`는 `.gitignore`에 포함되어 있으므로 원격 저장소에 올리지 않습니다.
@@ -69,7 +72,9 @@ python -m market_agent.cli "서울특별시 강남구 테헤란로 152" --radius
 
 - `market_agent/agent.py`: 전체 파이프라인 조립
 - `market_agent/geo.py`: 카카오 주소/시설 API 클라이언트
-- `market_agent/collectors/naver.py`: 네이버 뉴스/웹 검색 수집기
+- `market_agent/keywords.py`: 감성 분류, 부정어 처리, 정비사업 단계 가중치
+- `market_agent/collectors/naver.py`: 네이버 뉴스/웹 검색 수집기, 지역명 기반 오탐 필터
+- `market_agent/collectors/molit.py`: 국토부 실거래가 수집기 (최근 3개월 vs 직전 3개월 비교)
 - `market_agent/analysis/rule_engine.py`: 규칙 기반 점수화와 리포트 생성
 - `market_agent/analysis/openai_analyzer.py`: OpenAI 분석 코멘트 추가
 - `market_agent/server.py`: FastAPI 웹 UI
@@ -79,8 +84,9 @@ python -m market_agent.cli "서울특별시 강남구 테헤란로 152" --radius
 
 - 카카오 로컬 API: https://developers.kakao.com/docs/latest/ko/local/dev-guide
 - 네이버 검색 API 뉴스: https://developers.naver.com/docs/serviceapi/search/news/news.md
+- 국토교통부 아파트매매 실거래자료 (data.go.kr): https://www.data.go.kr/data/15058747/openapi.do
 - OpenAI Responses API: https://developers.openai.com/api/docs/guides/text
 
 ## 주의
 
-이 프로젝트는 투자 조언이나 가격 보장을 제공하지 않습니다. 실제 의사결정에는 실거래가, 전월세 추이, 공급 물량, 금리, 학군, 정비사업 단계, 규제 지역 여부, 현장 임장 데이터를 함께 검토해야 합니다.
+이 프로젝트는 투자 조언이나 가격 보장을 제공하지 않습니다. `MOLIT_API_KEY`를 등록해도 실거래가 데이터는 반경이 아닌 동/단지 표본 기준이라 거래량이 적은 시기에는 변동폭이 커질 수 있습니다. 실제 의사결정에는 실거래가, 전월세 추이, 공급 물량, 금리, 학군, 정비사업 단계, 규제 지역 여부, 현장 임장 데이터를 함께 검토해야 합니다.

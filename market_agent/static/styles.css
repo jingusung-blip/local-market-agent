@@ -440,6 +440,10 @@ button:hover {
   background: var(--red);
 }
 
+.chip.market {
+  background: var(--brown);
+}
+
 .insight-item summary > strong {
   display: block;
   margin: 14px 0 8px;

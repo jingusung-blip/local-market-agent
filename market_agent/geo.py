@@ -42,11 +42,16 @@ class KakaoLocalClient:
             return None
 
         first = documents[0]
+        region = first.get("address") or first.get("road_address") or {}
         return GeoPoint(
             address=first.get("address_name") or address,
             latitude=float(first["y"]),
             longitude=float(first["x"]),
             source="kakao",
+            region_1depth=region.get("region_1depth_name"),
+            region_2depth=region.get("region_2depth_name"),
+            region_3depth=region.get("region_3depth_name"),
+            b_code=region.get("b_code"),
         )
 
     def keyword_geocode(self, query: str) -> GeoPoint | None:
@@ -62,12 +67,28 @@ class KakaoLocalClient:
             or first.get("place_name")
             or query
         )
-        return GeoPoint(
+        point = GeoPoint(
             address=address,
             latitude=float(first["y"]),
             longitude=float(first["x"]),
             source="kakao-keyword",
         )
+
+        # Keyword/place search does not return region depth or 법정동코드 (b_code).
+        # Re-geocode the resolved address to fill those in for downstream use
+        # (apartment-name disambiguation, MOLIT sigungu lookup). Best-effort only.
+        if first.get("address_name"):
+            try:
+                enriched = self.geocode(first["address_name"])
+            except KakaoLocalError:
+                enriched = None
+            if enriched:
+                point.region_1depth = enriched.region_1depth
+                point.region_2depth = enriched.region_2depth
+                point.region_3depth = enriched.region_3depth
+                point.b_code = enriched.b_code
+
+        return point
 
     def search_category(
         self,

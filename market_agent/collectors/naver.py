@@ -111,11 +111,13 @@ class NaverNewsPolicyCollector:
     def collect(self, context: CollectContext) -> list[EvidenceItem]:
         evidence: list[EvidenceItem] = []
         seen: set[str] = set()
+        search_target = build_search_target(context)
+        region_tokens = context.region_tokens
 
         for query_template in GOOD_QUERIES:
             evidence.extend(
                 self._collect_news_query(
-                    query_template.format(target=context.target_text),
+                    query_template.format(target=search_target),
                     "positive",
                     seen,
                 )
@@ -124,7 +126,7 @@ class NaverNewsPolicyCollector:
         for query_template in BAD_QUERIES:
             evidence.extend(
                 self._collect_news_query(
-                    query_template.format(target=context.target_text),
+                    query_template.format(target=search_target),
                     "negative",
                     seen,
                 )
@@ -133,10 +135,13 @@ class NaverNewsPolicyCollector:
         for query_template in POLICY_QUERIES:
             evidence.extend(
                 self._collect_policy_query(
-                    query_template.format(target=context.target_text),
+                    query_template.format(target=search_target),
                     seen,
                 )
             )
+
+        for item in evidence:
+            apply_region_relevance(item, context.target_text, region_tokens)
 
         return sort_evidence_by_recency(evidence)
 
@@ -203,6 +208,55 @@ class NaverNewsPolicyCollector:
     @staticmethod
     def _dedupe_key(item: dict[str, Any]) -> str:
         return str(item.get("originallink") or item.get("link") or item.get("title"))
+
+
+def build_search_target(context: CollectContext) -> str:
+    """Build the text used in Naver search queries. When we only have a
+    generic apartment name (no address, or an address that doesn't already
+    carry the 구/동 name) and we know the region from geocoding, fold the
+    region name into the query so common apartment names (자이, 푸르지오,
+    e편한세상 ...) don't pull in news about a same-named complex in another
+    city."""
+    target = context.target_text
+    region_tokens = context.region_tokens
+    if not region_tokens:
+        return target
+    if any(token in target for token in region_tokens):
+        return target
+    # Prefer the 시/군/구 name (region_2depth) as the disambiguating token;
+    # it is specific enough without being as noisy as the full address.
+    region_hint = context.location.region_2depth if context.location else None
+    region_hint = region_hint or region_tokens[-1]
+    return f"{region_hint} {target}"
+
+
+def apply_region_relevance(
+    item: EvidenceItem, target_text: str, region_tokens: list[str]
+) -> None:
+    """Soft relevance check for apartment-name collisions. We don't have a
+    real distance filter for text search results (see README limitations),
+    so instead of dropping items outright -- which risks throwing away a
+    genuinely relevant article that just doesn't repeat the place name --
+    we discount confidence and flag it so the report can surface the
+    uncertainty instead of silently trusting an unrelated-region hit.
+
+    Note: deliberately does NOT treat "the article mentions the apartment
+    name" as reassurance -- a same-named complex in a different city is
+    exactly the collision this is meant to catch, so that check would
+    silently defeat the whole point."""
+    if not region_tokens:
+        return
+
+    haystack = f"{item.title} {item.summary}"
+    mentions_region = any(token and token in haystack for token in region_tokens)
+
+    if mentions_region:
+        return
+
+    item.reliability = round(max(0.15, item.reliability * 0.6), 2)
+    item.impact = round(item.impact * 0.6, 2)
+    if "지역확인필요" not in item.tags:
+        item.tags = sorted(set(item.tags) | {"지역확인필요"})
 
 
 def parse_search_date(value: str | None) -> datetime | None:

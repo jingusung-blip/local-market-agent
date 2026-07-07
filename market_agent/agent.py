@@ -5,6 +5,7 @@ from market_agent.analysis.rule_engine import build_report
 from market_agent.collectors.base import CollectContext
 from market_agent.collectors.demo import DemoCollector
 from market_agent.collectors.kakao_places import KakaoAmenityCollector
+from market_agent.collectors.molit import MolitClient, MolitTransactionCollector
 from market_agent.collectors.naver import NaverNewsPolicyCollector, NaverSearchClient
 from market_agent.config import Settings
 from market_agent.geo import KakaoLocalClient
@@ -103,6 +104,23 @@ class LocalMarketAgent:
                         sentiment="negative",
                         reliability=0.2,
                         impact=-0.5,
+                    )
+                )
+
+        if self.settings.molit_enabled and context.sigungu_code:
+            try:
+                molit_client = MolitClient(self.settings.molit_api_key or "")
+                evidence.extend(MolitTransactionCollector(molit_client).collect(context))
+            except Exception as exc:
+                evidence.append(
+                    EvidenceItem(
+                        title="실거래가 수집 실패",
+                        summary=str(exc),
+                        source="System",
+                        category="risk",
+                        sentiment="negative",
+                        reliability=0.2,
+                        impact=-0.3,
                     )
                 )
 

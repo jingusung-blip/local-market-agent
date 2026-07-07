@@ -18,6 +18,7 @@ AMENITY_POSITIVE_CAP = 5.0
 NEWS_POSITIVE_CAP = 12.0
 POLICY_POSITIVE_CAP = 8.0
 OTHER_POSITIVE_CAP = 5.0
+MARKET_DATA_POSITIVE_CAP = 10.0
 
 
 def build_report(
@@ -43,6 +44,9 @@ def build_report(
     local_factors = signals_from_evidence(
         [item for item in evidence if item.category == "amenity"]
     )
+    market_signals = signals_from_evidence(
+        [item for item in evidence if item.category == "market_data"]
+    )
 
     summary = make_summary(score, outlook, good_news, bad_news, policy_signals, local_factors)
     report_limitations = list(limitations or [])
@@ -56,6 +60,11 @@ def build_report(
         )
     if any(item.source == "Demo" for item in evidence):
         report_limitations.append("API 키 없이 생성한 데모 데이터가 포함되어 있습니다.")
+    if location and not any(item.category == "market_data" for item in evidence):
+        report_limitations.append(
+            "국토부 실거래가 API 키가 없어 실제 거래가 데이터는 반영되지 않았습니다. "
+            "점수는 뉴스/정책/생활 인프라 신호만으로 계산된 것입니다."
+        )
 
     return AnalysisReport(
         address=address,
@@ -71,6 +80,7 @@ def build_report(
         local_factors=local_factors,
         evidence=evidence,
         limitations=dedupe(report_limitations),
+        market_signals=market_signals,
     )
 
 
@@ -82,6 +92,7 @@ def calculate_score(evidence: list[EvidenceItem]) -> int:
         "amenity": 0.0,
         "news": 0.0,
         "policy": 0.0,
+        "market_data": 0.0,
         "other": 0.0,
     }
     negative_total = 0.0
@@ -96,6 +107,7 @@ def calculate_score(evidence: list[EvidenceItem]) -> int:
         min(AMENITY_POSITIVE_CAP, positive_totals["amenity"])
         + min(NEWS_POSITIVE_CAP, positive_totals["news"])
         + min(POLICY_POSITIVE_CAP, positive_totals["policy"])
+        + min(MARKET_DATA_POSITIVE_CAP, positive_totals["market_data"])
         + min(OTHER_POSITIVE_CAP, positive_totals["other"])
     )
 
@@ -112,17 +124,25 @@ def evidence_contribution(item: EvidenceItem) -> float:
             return weighted * 0.38
         if item.category == "policy":
             return weighted * 0.65
+        if item.category == "market_data":
+            # Real transaction data is the most trustworthy signal we have
+            # (it's not a keyword guess), so it's barely dampened.
+            return weighted * 0.90
         return weighted * 0.70
 
     if item.category == "risk":
         return weighted * 1.35
     if item.category == "policy":
         return weighted * 1.20
+    if item.category == "market_data":
+        # An actual recent price decline is more meaningful than a
+        # keyword-based negative news hit.
+        return weighted * 1.30
     return weighted * 1.20
 
 
 def score_category(item: EvidenceItem) -> str:
-    if item.category in {"amenity", "news", "policy"}:
+    if item.category in {"amenity", "news", "policy", "market_data"}:
         return item.category
     return "other"
 
@@ -139,6 +159,11 @@ def uncertainty_penalty(evidence: list[EvidenceItem]) -> float:
         penalty += 4.0
     if any(item.source == "Demo" for item in evidence):
         penalty += 3.0
+    if any(item.category == "market_data" and "표본부족" not in item.tags and "데이터부족" not in item.tags for item in evidence):
+        # Having real, sufficiently-sampled transaction data lowers the
+        # uncertainty that otherwise comes from relying only on keyword-based
+        # news/policy signals.
+        penalty -= 1.5
     return penalty
 
 
@@ -176,6 +201,8 @@ def calculate_confidence(evidence: list[EvidenceItem], location: GeoPoint | None
         confidence += 0.12
     if any(item.category == "amenity" for item in evidence):
         confidence += 0.10
+    if any(item.category == "market_data" for item in evidence):
+        confidence += 0.15
     if any(item.source == "Demo" for item in evidence):
         confidence -= 0.18
     return round(max(0.05, min(0.9, confidence)), 2)

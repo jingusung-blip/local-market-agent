@@ -14,6 +14,17 @@ class GeoPoint:
     latitude: float
     longitude: float
     source: str = "kakao"
+    region_1depth: str | None = None
+    region_2depth: str | None = None
+    region_3depth: str | None = None
+    b_code: str | None = None
+
+    @property
+    def sigungu_code(self) -> str | None:
+        """5-digit LAWD_CD used by the MOLIT real-transaction-price API."""
+        if self.b_code and len(self.b_code) >= 5:
+            return self.b_code[:5]
+        return None
 
 
 @dataclass
@@ -64,6 +75,7 @@ class AnalysisReport:
     local_factors: list[AnalysisSignal]
     evidence: list[EvidenceItem]
     limitations: list[str]
+    market_signals: list[AnalysisSignal] = field(default_factory=list)
     llm_commentary: str | None = None
     generated_at: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()

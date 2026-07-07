@@ -223,6 +223,74 @@ class RuleEngineTests(unittest.TestCase):
         self.assertIn("OpenAI 사용량 제한", message)
         self.assertNotIn("rate_limit_exceeded", message)
 
+    def test_market_data_evidence_appears_in_market_signals(self) -> None:
+        report = build_report(
+            address="서울시 테스트로 1",
+            radius_km=3,
+            location=None,
+            evidence=[
+                EvidenceItem(
+                    title="최근 3개월 실거래 상승",
+                    summary="실거래가 상승 추세",
+                    source="MOLIT",
+                    category="market_data",
+                    sentiment="positive",
+                    reliability=0.9,
+                    impact=3.0,
+                    tags=["실거래가"],
+                )
+            ],
+        )
+
+        self.assertTrue(report.market_signals)
+        self.assertEqual(report.market_signals[0].name, "실거래가")
+
+    def test_market_data_reduces_missing_data_limitation(self) -> None:
+        from market_agent.models import GeoPoint
+
+        location = GeoPoint(address="서울시 테스트로 1", latitude=37.5, longitude=127.0)
+
+        with_market_data = build_report(
+            address="서울시 테스트로 1",
+            radius_km=3,
+            location=location,
+            evidence=[
+                EvidenceItem(
+                    title="최근 3개월 실거래 상승",
+                    summary="실거래가 상승 추세",
+                    source="MOLIT",
+                    category="market_data",
+                    sentiment="positive",
+                    reliability=0.9,
+                    impact=3.0,
+                    tags=["실거래가"],
+                )
+            ],
+        )
+        without_market_data = build_report(
+            address="서울시 테스트로 1",
+            radius_km=3,
+            location=location,
+            evidence=[
+                EvidenceItem(
+                    title="교통 호재",
+                    summary="지하철 개통",
+                    source="test",
+                    category="news",
+                    sentiment="positive",
+                    reliability=0.8,
+                    impact=3.0,
+                )
+            ],
+        )
+
+        self.assertFalse(
+            any("실거래가 API" in item for item in with_market_data.limitations)
+        )
+        self.assertTrue(
+            any("실거래가 API" in item for item in without_market_data.limitations)
+        )
+
     def test_signal_rationale_prefers_newer_evidence(self) -> None:
         old_date = format_datetime(datetime(2024, 1, 1, tzinfo=timezone.utc), usegmt=True)
         new_date = format_datetime(datetime(2026, 5, 1, tzinfo=timezone.utc), usegmt=True)

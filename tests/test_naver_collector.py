@@ -5,9 +5,12 @@ from email.utils import format_datetime
 from market_agent.collectors.base import CollectContext
 from market_agent.collectors.naver import (
     NaverNewsPolicyCollector,
+    apply_region_relevance,
+    build_search_target,
     is_recent_news_item,
     recency_multiplier,
 )
+from market_agent.models import EvidenceItem, GeoPoint
 
 
 def pubdate(year: int, month: int, day: int) -> str:
@@ -76,6 +79,64 @@ class NaverCollectorTests(unittest.TestCase):
         older = recency_multiplier(datetime(2025, 1, 1, tzinfo=timezone.utc), now=now)
 
         self.assertGreater(fresh, older)
+
+    def test_build_search_target_adds_region_hint_for_bare_apartment_name(self) -> None:
+        location = GeoPoint(
+            address="서울 강남구 대치동 123",
+            latitude=37.5,
+            longitude=127.0,
+            region_1depth="서울특별시",
+            region_2depth="강남구",
+            region_3depth="대치동",
+        )
+        context = CollectContext(
+            address="",
+            radius_km=3,
+            apartment_name="래미안",
+            location=location,
+        )
+
+        target = build_search_target(context)
+
+        self.assertIn("강남구", target)
+        self.assertIn("래미안", target)
+
+    def test_build_search_target_unchanged_without_location(self) -> None:
+        context = CollectContext(address="서울 테스트 아파트", radius_km=3, apartment_name=None)
+
+        self.assertEqual(build_search_target(context), context.target_text)
+
+    def test_apply_region_relevance_discounts_unrelated_hit(self) -> None:
+        item = EvidenceItem(
+            title="래미안 부산 사업 소식",
+            summary="부산광역시에 있는 동명 단지 이야기입니다.",
+            source="Naver News",
+            category="news",
+            sentiment="positive",
+            reliability=0.8,
+            impact=3.0,
+        )
+
+        apply_region_relevance(item, "강남구 래미안", ["서울특별시", "강남구", "대치동"])
+
+        self.assertLess(item.reliability, 0.8)
+        self.assertIn("지역확인필요", item.tags)
+
+    def test_apply_region_relevance_keeps_matching_hit(self) -> None:
+        item = EvidenceItem(
+            title="강남구 래미안 인근 개발 호재",
+            summary="강남구 대치동 일대 교통망 확충 소식입니다.",
+            source="Naver News",
+            category="news",
+            sentiment="positive",
+            reliability=0.8,
+            impact=3.0,
+        )
+
+        apply_region_relevance(item, "강남구 래미안", ["서울특별시", "강남구", "대치동"])
+
+        self.assertEqual(item.reliability, 0.8)
+        self.assertNotIn("지역확인필요", item.tags)
 
 
 if __name__ == "__main__":

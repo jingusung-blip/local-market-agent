@@ -27,6 +27,7 @@ class Settings:
     openai_api_key: str | None = None
     openai_model: str = "gpt-5.4-mini"
     openai_base_url: str | None = None
+    molit_api_key: str | None = None
 
     @classmethod
     def from_env(cls, env_path: str | Path | None = None) -> "Settings":
@@ -39,6 +40,7 @@ class Settings:
             openai_api_key=os.getenv("OPENAI_API_KEY") or None,
             openai_model=os.getenv("OPENAI_MODEL", "gpt-5.4-mini"),
             openai_base_url=os.getenv("OPENAI_BASE_URL") or None,
+            molit_api_key=os.getenv("MOLIT_API_KEY") or None,
         )
 
     @property
@@ -52,3 +54,7 @@ class Settings:
     @property
     def openai_enabled(self) -> bool:
         return bool(self.openai_api_key)
+
+    @property
+    def molit_enabled(self) -> bool:
+        return bool(self.molit_api_key)
