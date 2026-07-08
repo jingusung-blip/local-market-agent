@@ -12,19 +12,33 @@
 - **resultCode 버그 수정함.** 로컬에서 실제 키로 테스트했더니 `MolitApiError: MOLIT API error 000: OK` 에러가 났음 — 이 API는 성공 코드를 다른 data.go.kr API처럼 `"00"`이 아니라 `"000"`(0이 3개)으로 응답하는데, 코드에서 `!= "00"`만 체크해서 성공인데도 에러로 잘못 처리하던 버그였음. `set(result_code) != {"0"}` (0으로만 이루어졌는지 체크)로 수정. 회귀 테스트 2개 추가 (`test_parse_trade_items_accepts_triple_zero_result_code`, `test_parse_trade_items_raises_on_real_error_code`).
 - 테스트 38개 모두 통과 확인 (샌드박스 내 격리 환경에서).
 - **로컬 실제 호출 테스트 성공 (사용자 확인).** `MolitClient.fetch_trades('11680', '202506')`으로 강남구 실거래 리스트가 정상적으로 반환됨. MOLIT 실거래가 연동이 실제로 작동합니다.
+- **git 커밋 & 푸시 완료.** 커밋 `dd7a109` (18개 파일 변경), `origin/main`에 반영됨. (중간에 `.git/index.lock` stale 파일 문제가 있었는데 `Remove-Item .git\index.lock`으로 해결함 — 다음에 또 이 에러 나면 같은 방법으로 지우면 됨.)
+- Render 환경변수에 `MOLIT_API_KEY` 추가 진행 중 (Environment 탭 → Edit 버튼).
 
-**아직 안 끝난 것 — 순서대로**
+### 2026-07-08 실사용 중 발견된 버그: 메뉴/태그 목록을 문장으로 오인
 
-1. **git 커밋 & 푸시.** 코드 변경분은 실제 폴더에 이미 반영되어 있지만 아직 커밋되지 않았습니다 (샌드박스에 GitHub 인증정보가 없어 직접 push 못함). 로컬 터미널에서:
+사용자가 "고덕강일 대성베르힐"로 조회했더니 정책변수·주의신호 카드에 **똑같은 근거**("공고")가 중복으로 뜨고, 실제로는 미분양이 없는 단지인데 "미분양"으로 감점됨.
+
+원인 두 가지:
+1. **표시 중복**: 네이버 검색으로 가져온 기사 하나가 `category="policy"`이면서 동시에 `sentiment="negative"`로 판정되면, 정책변수(category 기준)와 주의신호(sentiment 기준) 두 카드에 같은 근거가 중복으로 나타남. 두 카드가 서로 다른 기준으로 필터링하기 때문에 생기는 구조적인 현상.
+2. **진짜 원인**: 근거로 잡힌 텍스트가 실제 기사 본문이 아니라, 분양 블로그의 **메뉴/탭 목록**이었음 — `"고덕강일 대성베르힐: 고덕강일 대성베르힐 | 강동구 상일동 | 미분양 | 위치 | 입주자모집공고 | 분양가 | 평면 | 청약 | 모델하우스"`. "미분양"은 문장이 아니라 그 페이지에 있는 메뉴 탭 이름 중 하나였는데, 키워드 매칭기가 이걸 구분 못 하고 악재로 잘못 판정함.
+
+**수정**: `market_agent/keywords.py`에 `is_tag_list_text()` 추가 — 텍스트에 파이프(`|`)가 3개 이상이면 메뉴/태그 목록으로 보고, `classify_sentiment`/`estimate_impact`에서 긍정·부정 키워드 기반 판정을 건너뜀 (정책 키워드로 카테고리 분류만 유지). 실사용에서 나온 실제 텍스트로 회귀 테스트 추가 (`test_menu_tag_list_does_not_trigger_false_negative_sentiment`). 테스트 총 40개 통과.
+
+이 수정은 아직 커밋/푸시 전입니다 — 다음에 이어서 커밋 필요.
+
+**아직 안 끝난 것**
+
+1. **git 커밋 & 푸시 (2차).** `keywords.py`, `tests/test_keywords.py` 변경분:
 
    ```powershell
    cd "C:\Users\OK\Desktop\주변상권분석"
    git add -A
-   git commit -m "Improve scoring accuracy: negation handling, redevelopment stages, region-aware news filtering, MOLIT real transaction data"
+   git commit -m "Fix false-positive risk detection on nav-menu/tag-list search snippets"
    git push origin main
    ```
 
-2. **Render 환경변수 추가.** 푸시하면 자동 배포되는데, 배포된 서버에서도 실거래가 기능을 쓰려면 Render Dashboard → Environment Variables에 `MOLIT_API_KEY`를 로컬 `.env`와 동일한 값으로 추가해야 합니다 (로컬 `.env`는 자동으로 Render에 올라가지 않음).
+2. **Render 환경변수 `MOLIT_API_KEY` 등록이 끝났는지 확인.**
 
 ## 프로젝트 목적
 
