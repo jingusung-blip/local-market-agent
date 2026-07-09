@@ -4,6 +4,12 @@
 
 ## 다음 세션에서 이어서 할 일 (2026-07-09 기준, 여기서부터 이어가면 됨)
 
+**2026-07-09 (4차): ECOS 실제 키 검증 완료**
+
+- 사용자가 이미 발급받아둔 ECOS 인증키(비영리, 2026.03.19~2028.03.19, 상태 정상)를 `.env`에 추가. `verify_ecos_api.py`로 실제 호출 → 100개 지표 정상 수신, "한국은행 기준금리" 항목도 정확히 찾음 (현재 2.5%, 기준 20260707). 필드명(`CLASS_NAME`, `KEYSTAT_NAME`, `DATA_VALUE`, `CYCLE`, `UNIT_NAME`)이 코드와 정확히 일치해서 수정 없이 바로 동작 확인.
+- 검증용 스크립트(`verify_ecos_api.py`)는 커밋 전 삭제 필요.
+- Render 환경변수에 `ECOS_API_KEY` 추가 필요 (아직 미등록).
+
 **2026-07-09 (3차): 한국은행 기준금리 연동 완료 (ROADMAP 4순위) + 표시 중복 버그 수정**
 
 - ECOS "100대 통계지표(KeyStatisticList)" API 사용 — 통계표코드/항목코드를 몰라도 되는 사전 정의 지표 목록에서 "한국은행 기준금리"를 이름으로 바로 찾는 방식이라 매매 API 때 같은 코드 추측 버그 리스크가 없음. sample 엔드포인트(`https://ecos.bok.or.kr/api/KeyStatisticList/sample/json/kr/1/10`)로 실제 응답 스키마(`KeyStatisticList.row[].{CLASS_NAME,KEYSTAT_NAME,DATA_VALUE,CYCLE,UNIT_NAME}`)와 에러 형식(`{"RESULT":{"CODE","MESSAGE"}}`)을 인증키 없이 미리 확인함.
@@ -75,16 +81,23 @@
 
 3. ~~규제지역 지정 현황 기능 git 커밋 & 푸시~~ **완료.** 커밋 `1ab90f3` (7개 파일 변경), `origin/main`에 반영됨. Render 자동 배포됨 (별도 환경변수 불필요, 외부 API 키 없이 동작).
 
-4. **한국은행 기준금리 기능 git 커밋 & 푸시 필요.** ECOS API는 아직 실제 키로 검증 안 함 (sample 엔드포인트로 스키마만 확인) — data.go.kr가 아니라 ecos.bok.or.kr에서 별도 회원가입 + 인증키 발급 필요. `.env`에 `ECOS_API_KEY` 추가 후 로컬에서 실제 호출 테스트 먼저 권장.
+4. ~~한국은행 기준금리 기능 git 커밋 & 푸시~~ **완료.** 커밋 `3940c6a` (13개 파일 변경), `origin/main`에 반영됨.
+
+5. ~~ECOS 실제 키 검증~~ **완료.** 필드명 정확히 일치, 코드 수정 불필요. 다음에 이어서 할 때: 검증용 스크립트(`verify_ecos_api.py`) 삭제하고 git commit/push, 그 다음 Render 환경변수에 `ECOS_API_KEY` 등록.
 
    ```powershell
    cd "C:\Users\OK\Desktop\주변상권분석"
+   Remove-Item verify_ecos_api.py
    git add -A
-   git commit -m "Add Bank of Korea base rate context and fix policy/bad_news duplication"
+   git commit -m "Add verified ECOS_API_KEY to local env docs"
    git push origin main
    ```
 
-5. **다음 로드맵: `ROADMAP.md` 5순위(청약 경쟁률).** 2순위(공식 미분양 통계)는 전국 통일 API가 없어 보류 상태 — 나중에 시/도별 파편화 API라도 부분 지원할지 다시 논의 필요.
+   (참고: `.env`는 `.gitignore`에 포함되어 실제 키 값은 커밋되지 않음 — 위 커밋은 `verify_ecos_api.py` 삭제와 노트 정리만 반영됨)
+
+6. **Render 환경변수에 `ECOS_API_KEY` 추가.** Environment 탭 → Edit → `ECOS_API_KEY=6FZ60RLMG4T6VM8GE9EO` 추가 (매매/전월세 때와 동일한 방식).
+
+7. **다음 로드맵: `ROADMAP.md` 5순위(청약 경쟁률).** 2순위(공식 미분양 통계)는 전국 통일 API가 없어 보류 상태 — 나중에 시/도별 파편화 API라도 부분 지원할지 다시 논의 필요.
 
 ## 프로젝트 목적
 
@@ -217,7 +230,7 @@ AI 요약이 안 보일 때 체크할 순서:
 - `market_agent/collectors/molit_rent.py`: 국토부 아파트 전월세 실거래가 수집, 전세가율 계산 (실제 키 검증 완료)
 - `market_agent/collectors/data_go_kr.py`: data.go.kr XML 응답 공통 파서
 - `market_agent/collectors/regulation.py`, `market_agent/regulation_areas.py`: 규제지역 수동 유지보수 목록/판정
-- `market_agent/collectors/ecos.py`: 한국은행 기준금리 조회, 하루 단위 캐싱 (⚠️ 커밋 전, 실제 키 검증 전)
+- `market_agent/collectors/ecos.py`: 한국은행 기준금리 조회, 하루 단위 캐싱 (⚠️ 실제 키 검증 전)
 - `market_agent/analysis/rule_engine.py`: 점수, 전망, 인사이트 신호 계산 (market_data 카테고리 포함, good_news/bad_news에서 policy/amenity/market_data 배타 처리)
 - `market_agent/analysis/openai_analyzer.py`: OpenAI 전문가 요약 생성
 - `market_agent/templates/index.html`: 화면 구조 (실거래가/전세가율 인사이트 카드, market_signals 전체 순회, 기준금리 안내문)
@@ -227,7 +240,7 @@ AI 요약이 안 보일 때 체크할 순서:
 
 ## 최근 반영된 커밋
 
-- 2026-07-09 (커밋 전): 한국은행 기준금리 연동 + 정책/주의신호 표시 중복 버그 수정
+- 2026-07-09: `3940c6a` 한국은행 기준금리 연동 (ECOS API 키 검증 전) + 정책/주의신호 표시 중복 버그 수정
 - 2026-07-09: `1ab90f3` 규제지역 지정 현황 수동 목록 + 수집기
 - 2026-07-09: `a77ff61` 전월세 실거래가(전세가율) 수집기 + 실제 키 검증 완료
 - 2026-07-08: `3781434` 메뉴/태그 목록 오탐 수정 (keywords.py는 이미 dd7a109에 포함되어 있었음) + ROADMAP.md 추가
