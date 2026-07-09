@@ -1,8 +1,21 @@
 # Local Market Agent 작업 기록
 
-마지막 정리일: 2026-07-07
+마지막 정리일: 2026-07-09
 
-## 다음 세션에서 이어서 할 일 (2026-07-07 기준, 여기서부터 이어가면 됨)
+## 다음 세션에서 이어서 할 일 (2026-07-09 기준, 여기서부터 이어가면 됨)
+
+**2026-07-09: 전월세 실거래가(전세가율) 구현 + 실제 키 검증 완료**
+
+- `ROADMAP.md` 1순위 작업. data.go.kr "국토교통부_아파트 전월세 실거래가 자료" 활용신청 승인 완료 (자동승인, 활용기간 2026-07-09~2028-07-09). End Point가 `https://apis.data.go.kr/1613000/RTMSDataSvcAptRent/getRTMSDataSvcAptRent`로 코드에 미리 넣어둔 값과 정확히 일치했고, 인증키도 기존 `MOLIT_API_KEY`를 그대로 재사용 (계정 단위 키라 매매/전월세 공용).
+- 코드:
+  - `market_agent/collectors/data_go_kr.py` (신규): XML 파싱 + resultCode 성공 판정을 매매/전월세 공통 함수로 분리 (`parse_xml_items`, `DataGoKrApiError`). `market_agent/collectors/molit.py`의 `MolitApiError`/`parse_trade_items`는 이제 이 공통 모듈을 감싸는 얇은 래퍼.
+  - `market_agent/collectors/molit_rent.py` (신규): `RentClient`, `is_jeonse`/`deposit_per_area`, `build_jeonse_evidence`(전세가율 70%↑ positive, 50%↓ negative), `JeonseRatioCollector`.
+  - `market_agent/agent.py`: `JeonseRatioCollector`를 `molit_enabled` 게이트 안에 추가, 실패 시 조용히 건너뜀 (경고 카드 없음).
+  - `market_agent/templates/index.html`: 실거래가 인사이트 카드가 `market_signals` 전체를 순회하도록 변경 (매매/전세가율 각각 표시).
+  - `tests/test_molit_rent.py` (신규, 12개). 전체 테스트 52개 통과.
+- **실제 키 검증 완료.** 사용자가 `verify_rent_api.py`로 원본 XML 응답 확인 → 필드명(`deposit`, `monthlyRent`, `excluUseAr`, `aptNm`, `umdNm`) 전부 코드와 일치, resultCode도 매매와 동일하게 `000`. 매매 때와 달리 이번엔 버그 없이 한 번에 맞음. `verify_jeonse_ratio.py`로 `JeonseRatioCollector.collect()` 실제 통합 테스트도 성공 (강남구 대치동, 매매 표본 106건/전세 표본 56건, 전세가율 29.6% 산출 — 재건축 대상 단지 혼재로 낮게 나온 것으로 보이며, 특정 단지명을 지정하면 더 정확해짐. 매매 실거래가 기능과 동일한 특성).
+- 검증용 임시 스크립트(`verify_rent_api.py`, `verify_jeonse_ratio.py`)는 커밋 전에 삭제 필요.
+- 커밋 완료 여부는 아래 "아직 안 끝난 것" 참고.
 
 **완료된 것**
 
@@ -25,22 +38,23 @@
 
 **수정**: `market_agent/keywords.py`에 `is_tag_list_text()` 추가 — 텍스트에 파이프(`|`)가 3개 이상이면 메뉴/태그 목록으로 보고, `classify_sentiment`/`estimate_impact`에서 긍정·부정 키워드 기반 판정을 건너뜀 (정책 키워드로 카테고리 분류만 유지). 실사용에서 나온 실제 텍스트로 회귀 테스트 추가 (`test_menu_tag_list_does_not_trigger_false_negative_sentiment`). 테스트 총 40개 통과.
 
-이 수정은 아직 커밋/푸시 전입니다 — 다음에 이어서 커밋 필요.
+**커밋/푸시 완료.** `git show --stat HEAD`로 확인 결과 이 수정은 커밋 `dd7a109`(첫 대량 커밋)에 이미 포함되어 `origin/main`에 반영되어 있었음. 이후 커밋 `3781434`는 `ROADMAP.md` + 이 노트 파일 업데이트만 추가한 것. `git status` = clean, `origin/main`과 동기화 완료 확인함 (2026-07-08).
 
 **아직 안 끝난 것**
 
-1. **git 커밋 & 푸시 (2차).** `keywords.py`, `tests/test_keywords.py` 변경분:
+1. **git 커밋 & 푸시.** 검증용 임시 스크립트(`verify_rent_api.py`, `verify_jeonse_ratio.py`)는 삭제하고 커밋:
 
    ```powershell
    cd "C:\Users\OK\Desktop\주변상권분석"
+   Remove-Item verify_rent_api.py, verify_jeonse_ratio.py
    git add -A
-   git commit -m "Fix false-positive risk detection on nav-menu/tag-list search snippets"
+   git commit -m "Add jeonse ratio (rent transaction) collector"
    git push origin main
    ```
 
 2. **Render 환경변수 `MOLIT_API_KEY` 등록이 끝났는지 확인.**
 
-3. **다음 기능 로드맵은 `ROADMAP.md` 참고.** 전월세 실거래가(전세가율), 공식 미분양 통계, 규제지역 지정 현황, 한국은행 기준금리, 청약 경쟁률 순으로 우선순위와 API 출처를 정리해뒀음. "낼 이어서 하자"면 `ROADMAP.md`의 1순위(전월세 실거래가)부터 시작하면 됨.
+3. **다음 기능 로드맵은 `ROADMAP.md` 참고.** 전월세 실거래가(전세가율, 완료) 다음은 공식 미분양 통계, 규제지역 지정 현황, 한국은행 기준금리, 청약 경쟁률 순.
 
 ## 프로젝트 목적
 
@@ -170,16 +184,20 @@ AI 요약이 안 보일 때 체크할 순서:
 - `market_agent/collectors/kakao_places.py`: 주변 생활 인프라 수집
 - `market_agent/collectors/naver.py`: 네이버 뉴스/정책 수집, 최신 뉴스 필터, 지역명 기반 오탐 필터
 - `market_agent/collectors/molit.py`: 국토부 아파트매매 실거래가 수집·집계
+- `market_agent/collectors/molit_rent.py`: 국토부 아파트 전월세 실거래가 수집, 전세가율 계산 (⚠️ 실제 키 검증 대기중)
+- `market_agent/collectors/data_go_kr.py`: data.go.kr XML 응답 공통 파서
 - `market_agent/analysis/rule_engine.py`: 점수, 전망, 인사이트 신호 계산 (market_data 카테고리 포함)
 - `market_agent/analysis/openai_analyzer.py`: OpenAI 전문가 요약 생성
-- `market_agent/templates/index.html`: 화면 구조 (실거래가 인사이트 카드 포함)
+- `market_agent/templates/index.html`: 화면 구조 (실거래가/전세가율 인사이트 카드, market_signals 전체 순회)
 - `market_agent/static/styles.css`: 화면 디자인
 - `render.yaml`: Render 배포 설정
-- `tests/`: 자동 테스트 (test_keywords.py, test_molit.py 추가)
+- `tests/`: 자동 테스트 (test_keywords.py, test_molit.py, test_molit_rent.py 추가, 총 52개)
 
 ## 최근 반영된 커밋
 
-- 2026-07-07: 감성분석 부정어 처리, 정비사업 단계 가중치, 지역명 기반 동명이인 필터, 국토부 실거래가 API 연동
+- 2026-07-09 (커밋 전): 전월세 실거래가(전세가율) 수집기 코드 작업 완료, 실제 키 검증 대기
+- 2026-07-08: `3781434` 메뉴/태그 목록 오탐 수정 (keywords.py는 이미 dd7a109에 포함되어 있었음) + ROADMAP.md 추가
+- 2026-07-07: `dd7a109` 감성분석 부정어 처리, 정비사업 단계 가중치, 지역명 기반 동명이인 필터, 국토부 실거래가 API 연동
 - `d69e05e`: 인사이트 화면 단순화, 단지명만 입력해도 분석 가능
 - `1dcc7d3`: OpenAI 429 원문 에러 숨김
 - `abc311d`: 클릭 가능한 상세 인사이트 추가
@@ -188,7 +206,6 @@ AI 요약이 안 보일 때 체크할 순서:
 
 ## 다음에 바꾸기 좋은 후보
 
-- 국토부 실거래가 데이터에 전월세(전세가율) 자료 추가해 갭투자 리스크 신호 반영
 - 뉴스 기간을 2년에서 6개월 또는 1년으로 더 엄격하게 조정
 - AI 요약 실패 시 자동 재시도와 눈에 띄는 상태 표시 추가
 - 인사이트 상세에 실제 근거 기사 제목 목록 추가

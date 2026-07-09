@@ -6,6 +6,7 @@ from market_agent.collectors.base import CollectContext
 from market_agent.collectors.demo import DemoCollector
 from market_agent.collectors.kakao_places import KakaoAmenityCollector
 from market_agent.collectors.molit import MolitClient, MolitTransactionCollector
+from market_agent.collectors.molit_rent import JeonseRatioCollector, RentClient
 from market_agent.collectors.naver import NaverNewsPolicyCollector, NaverSearchClient
 from market_agent.config import Settings
 from market_agent.geo import KakaoLocalClient
@@ -123,6 +124,21 @@ class LocalMarketAgent:
                         impact=-0.3,
                     )
                 )
+
+            # 전세가율은 매매 API와 같은 MOLIT_API_KEY를 사용하되, 전월세
+            # 자료는 별도 data.go.kr 활용신청이 필요하다. 아직 승인 전이거나
+            # 엔드포인트/필드명이 실제와 달라 실패하더라도, 매매 실거래가
+            # 자체는 이미 위에서 수집됐으니 조용히 넘어가고 결과에 아무 것도
+            # 추가하지 않는다 (사용자에게 무관한 "리스크"로 오인시키지 않기
+            # 위함 -- 이건 단지에 대한 위험 신호가 아니라 시스템 준비 상태임).
+            try:
+                trade_client = MolitClient(self.settings.molit_api_key or "")
+                rent_client = RentClient(self.settings.molit_api_key or "")
+                evidence.extend(
+                    JeonseRatioCollector(trade_client, rent_client).collect(context)
+                )
+            except Exception:
+                pass
 
         return evidence
 

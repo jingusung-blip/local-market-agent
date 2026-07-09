@@ -8,8 +8,9 @@
 2. 카카오 로컬 API로 반경 내 지하철역, 학교, 병원, 대형마트, 문화시설 등 생활 인프라를 집계합니다.
 3. 네이버 검색 API로 주소/단지명 기반 뉴스, 정책, 악재 키워드를 수집합니다. 좌표에서 얻은 구/동 이름을 검색어에 함께 넣고, 결과 본문에 그 지역명이 없으면 신뢰도를 낮춰 동명이인 단지(예: 여러 도시의 "자이", "래미안") 오탐을 줄입니다.
 4. `MOLIT_API_KEY`가 있으면 국토교통부 아파트매매 실거래 자료로 최근 3개월과 직전 3개월의 평균 실거래가를 비교해 실제 가격 추세 신호를 추가합니다.
-5. 수집된 근거를 긍정/부정/정책/생활 인프라/실거래가로 분류하고, 정비사업 관련 근거는 진행 단계(조합설립~착공/준공)에 따라 가중치를 다르게 반영해 0~100점 전망 점수를 냅니다.
-6. `OPENAI_API_KEY`가 있으면 OpenAI Responses API로 분석 코멘트를 추가합니다.
+5. 같은 키로 아파트 전월세 실거래 자료도 함께 조회해 전세가율(전세 중위가 ÷ 매매 중위가)을 계산합니다. 전월세 API는 매매 API와 별도로 data.go.kr 활용신청이 필요합니다 (2026-07-09 실제 키로 검증 완료). 미승인 계정이거나 API 호출이 실패하면 조용히 건너뛰고 매매 실거래가만 반영합니다.
+6. 수집된 근거를 긍정/부정/정책/생활 인프라/실거래가로 분류하고, 정비사업 관련 근거는 진행 단계(조합설립~착공/준공)에 따라 가중치를 다르게 반영해 0~100점 전망 점수를 냅니다.
+7. `OPENAI_API_KEY`가 있으면 OpenAI Responses API로 분석 코멘트를 추가합니다.
 
 뉴스/정책 검색은 키워드 기반이며, 부정 키워드 주변에 "해소/완화/없음" 같은 표현이 있으면 리스크가 해소된 것으로 보정합니다. 카카오 시설 수집은 좌표와 반경을 사용하지만, 네이버 뉴스/웹 검색 결과 자체는 엄밀한 거리 필터가 아니라 지역명 매칭에 의존합니다. 리포트의 `limitations`에 이 차이를 명시합니다.
 
@@ -27,7 +28,7 @@ Copy-Item .env.example .env
 - `KAKAO_REST_API_KEY`: 주소 좌표화와 반경 내 시설 수집
 - `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET`: 뉴스/정책 수집
 - `OPENAI_API_KEY`: 선택 사항, LLM 분석 코멘트
-- `MOLIT_API_KEY`: 선택 사항이지만 강력 권장. 실제 실거래가 반영 (data.go.kr에서 "국토교통부_아파트매매 실거래자료" 검색 후 활용신청)
+- `MOLIT_API_KEY`: 선택 사항이지만 강력 권장. 실제 실거래가 반영 (data.go.kr에서 "국토교통부_아파트매매 실거래자료"와 "국토교통부_아파트 전월세 실거래가 자료" 둘 다 활용신청 필요, 승인되면 같은 인증키를 그대로 사용)
 
 ## 실행
 
@@ -74,7 +75,9 @@ python -m market_agent.cli "서울특별시 강남구 테헤란로 152" --radius
 - `market_agent/geo.py`: 카카오 주소/시설 API 클라이언트
 - `market_agent/keywords.py`: 감성 분류, 부정어 처리, 정비사업 단계 가중치
 - `market_agent/collectors/naver.py`: 네이버 뉴스/웹 검색 수집기, 지역명 기반 오탐 필터
-- `market_agent/collectors/molit.py`: 국토부 실거래가 수집기 (최근 3개월 vs 직전 3개월 비교)
+- `market_agent/collectors/molit.py`: 국토부 매매 실거래가 수집기 (최근 3개월 vs 직전 3개월 비교)
+- `market_agent/collectors/molit_rent.py`: 국토부 전월세 실거래가 수집기, 전세가율 계산
+- `market_agent/collectors/data_go_kr.py`: data.go.kr XML 응답 공통 파서 (resultCode 처리 공유)
 - `market_agent/analysis/rule_engine.py`: 규칙 기반 점수화와 리포트 생성
 - `market_agent/analysis/openai_analyzer.py`: OpenAI 분석 코멘트 추가
 - `market_agent/server.py`: FastAPI 웹 UI

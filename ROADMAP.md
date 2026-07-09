@@ -9,7 +9,9 @@
 
 ---
 
-## 1순위: 아파트 전월세 실거래가 (전세가율)
+## 1순위: 아파트 전월세 실거래가 (전세가율) — ✅ 완료 (2026-07-09)
+
+**진행 상황 (2026-07-09)**: `market_agent/collectors/molit_rent.py`, `market_agent/collectors/data_go_kr.py` 작성. 템플릿(`index.html`)에서 실거래가/전세가율 카드를 모두 보여주도록 수정. 테스트 12개 추가, 전체 52개 통과. data.go.kr 전월세 API 활용신청 승인 완료, 실제 키로 원본 응답과 통합 수집기 둘 다 검증 완료 — End Point(`RTMSDataSvcAptRent`)와 필드명(`deposit`, `monthlyRent`, `excluUseAr`)이 코드와 정확히 일치해서 추가 수정 없이 바로 동작함. (자세한 내용은 `PROJECT_NOTES.md`의 2026-07-09 항목 참고)
 
 **왜 필요한가**: 전세가율(전세가/매매가)은 실수요 강도와 갭투자 리스크를 보여주는 핵심 지표. 매매 실거래가는 이미 반영했으니, 같은 API 계열의 전월세 자료만 추가하면 됨.
 

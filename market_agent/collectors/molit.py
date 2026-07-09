@@ -4,11 +4,11 @@ import statistics
 import urllib.error
 import urllib.parse
 import urllib.request
-import xml.etree.ElementTree as ET
 from datetime import date
 from typing import Any
 
 from market_agent.collectors.base import CollectContext
+from market_agent.collectors.data_go_kr import DataGoKrApiError, parse_xml_items
 from market_agent.models import EvidenceItem
 
 
@@ -18,8 +18,10 @@ BASELINE_WINDOW_MONTHS = 3
 MIN_SAMPLE_SIZE = 3
 
 
-class MolitApiError(RuntimeError):
-    pass
+# Alias kept for backwards compatibility (existing code/tests import
+# MolitApiError from this module). The real implementation is shared across
+# all data.go.kr collectors in data_go_kr.py.
+MolitApiError = DataGoKrApiError
 
 
 class MolitClient:
@@ -73,27 +75,7 @@ class MolitClient:
 
 
 def parse_trade_items(payload: bytes) -> list[dict[str, Any]]:
-    try:
-        root = ET.fromstring(payload)
-    except ET.ParseError as exc:
-        raise MolitApiError(f"MOLIT API returned an unparseable response: {exc}") from exc
-
-    header = root.find("header")
-    if header is not None:
-        result_code = (header.findtext("resultCode") or "").strip()
-        # This API family isn't consistent about success-code width: some
-        # data.go.kr services use "00", this one returns "000". Treat any
-        # all-zero code as success instead of hardcoding one length.
-        if result_code and set(result_code) != {"0"}:
-            raise MolitApiError(
-                f"MOLIT API error {result_code}: {header.findtext('resultMsg')}"
-            )
-
-    items: list[dict[str, Any]] = []
-    for item in root.findall("./body/items/item"):
-        record = {child.tag: (child.text or "").strip() for child in item}
-        items.append(record)
-    return items
+    return parse_xml_items(payload)
 
 
 def normalize_amount(value: str | None) -> float | None:
