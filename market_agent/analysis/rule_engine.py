@@ -32,11 +32,27 @@ def build_report(
     outlook = outlook_label(score)
     confidence = calculate_confidence(evidence, location)
 
+    # amenity/policy/market_data는 각각 전용 카드(local_factors/policy_signals/
+    # market_signals)가 있으므로 good_news/bad_news에서는 제외한다. 예전에는
+    # 이 제외 처리가 없어서, 예를 들어 category="policy"이면서 sentiment=
+    # "negative"인 근거(예: 규제지역 지정)가 정책변수 카드와 주의신호 카드에
+    # 동시에 중복 표시되는 버그가 있었다 (2026-07-08 실사용 중 발견).
+    DEDICATED_CATEGORIES = {"amenity", "policy", "market_data"}
+
     good_news = signals_from_evidence(
-        [item for item in evidence if item.sentiment == "positive" and item.category != "amenity"]
+        [
+            item
+            for item in evidence
+            if item.sentiment == "positive" and item.category not in DEDICATED_CATEGORIES
+        ]
     )
     bad_news = signals_from_evidence(
-        [item for item in evidence if item.sentiment == "negative" or item.category == "risk"]
+        [
+            item
+            for item in evidence
+            if item.category not in DEDICATED_CATEGORIES
+            and (item.sentiment == "negative" or item.category == "risk")
+        ]
     )
     policy_signals = signals_from_evidence(
         [item for item in evidence if item.category == "policy"]
@@ -47,6 +63,12 @@ def build_report(
     market_signals = signals_from_evidence(
         [item for item in evidence if item.category == "market_data"]
     )
+
+    # 기준금리는 전국 공통 거시 변수라 위치별 점수에 영향을 주지 않도록
+    # impact=0으로 들어오지만(다른 카드들과 경합하면 노출이 묻힐 수 있음),
+    # 항상 눈에 띄게 보여주기 위해 별도 필드로 뽑아둔다.
+    base_rate_item = next((item for item in evidence if "기준금리" in item.tags), None)
+    base_rate_note = base_rate_item.title if base_rate_item else None
 
     summary = make_summary(score, outlook, good_news, bad_news, policy_signals, local_factors)
     report_limitations = list(limitations or [])
@@ -81,6 +103,7 @@ def build_report(
         evidence=evidence,
         limitations=dedupe(report_limitations),
         market_signals=market_signals,
+        base_rate_note=base_rate_note,
     )
 
 

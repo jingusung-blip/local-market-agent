@@ -4,6 +4,21 @@
 
 ## 다음 세션에서 이어서 할 일 (2026-07-09 기준, 여기서부터 이어가면 됨)
 
+**2026-07-09 (3차): 한국은행 기준금리 연동 완료 (ROADMAP 4순위) + 표시 중복 버그 수정**
+
+- ECOS "100대 통계지표(KeyStatisticList)" API 사용 — 통계표코드/항목코드를 몰라도 되는 사전 정의 지표 목록에서 "한국은행 기준금리"를 이름으로 바로 찾는 방식이라 매매 API 때 같은 코드 추측 버그 리스크가 없음. sample 엔드포인트(`https://ecos.bok.or.kr/api/KeyStatisticList/sample/json/kr/1/10`)로 실제 응답 스키마(`KeyStatisticList.row[].{CLASS_NAME,KEYSTAT_NAME,DATA_VALUE,CYCLE,UNIT_NAME}`)와 에러 형식(`{"RESULT":{"CODE","MESSAGE"}}`)을 인증키 없이 미리 확인함.
+- 코드:
+  - `market_agent/collectors/ecos.py` (신규): `EcosClient`, `parse_key_statistic_response`, `find_base_rate`, `build_base_rate_evidence`, `BaseRateCollector` (전국 공통 값이라 프로세스 단위로 하루 1회만 조회하도록 클래스 레벨 캐싱).
+  - `market_agent/config.py`: `ECOS_API_KEY`/`ecos_enabled` 추가.
+  - `market_agent/agent.py`: `BaseRateCollector`를 `ecos_enabled` 게이트로 추가, 실패 시 조용히 건너뜀.
+  - `market_agent/models.py`: `AnalysisReport.base_rate_note` 필드 추가 (기준금리는 impact=0으로 넣어서 점수에 영향 없게 하되, 다른 신호에 묻혀 안 보이지 않도록 항상 노출되는 전용 필드로 분리).
+  - `market_agent/analysis/rule_engine.py`: evidence에서 tags에 "기준금리"가 있는 항목을 찾아 `base_rate_note`로 뽑음.
+  - `market_agent/templates/index.html`, `static/styles.css`: `report.base_rate_note`를 핵심 결론 아래 작은 안내문으로 표시.
+  - `.env.example`, `README.md`: `ECOS_API_KEY` 문서화.
+- **표시 중복 버그 수정 (2026-07-08에 진단만 하고 미뤄뒀던 것).** `category="policy"`이면서 `sentiment="negative"`인 근거(예: 규제지역 지정)가 정책변수 카드와 주의신호 카드에 동시에 뜨는 구조적 버그가 있었음. 이번에 규제지역 기능을 붙이면서 거의 모든 서울 주소 조회에서 이 버그가 재현될 게 뻔해서 지금 고침 — `rule_engine.build_report()`의 `good_news`/`bad_news` 필터에서 `amenity`/`policy`/`market_data` 카테고리를 제외해 카드별로 배타적으로 나오게 함. 회귀 테스트 추가.
+- 테스트 9개(ecos) + 3개(rule_engine: 중복 버그, 기준금리 표시 2개) 추가, 전체 72개 통과.
+- 아직 커밋/푸시 전.
+
 **2026-07-09 (2차): 규제지역 지정 현황 반영 완료, 미분양 통계는 보류**
 
 - `ROADMAP.md` 2순위(공식 미분양 통계)를 먼저 조사했으나, 실제로는 전국 통일 API가 없다는 걸 확인함. 원래 로드맵에 적어뒀던 "한국부동산원_부동산통계 조회 서비스(15134761)"는 2022년 API 개편 공지를 보니 미분양을 다루지 않고(주간아파트동향/주택가격동향/실거래가격지수 등 8종뿐), data.go.kr에서 "미분양" 검색 결과 국토부 차원 통합 API는 없고 **시/도별로 파편화**되어 있음 (경기도·부산광역시·경상남도 등 일부 지자체만 자체 API 보유, 서울은 API 자체가 없음). 국토부 통계누리 전국 통합 "미분양주택현황보고"도 API가 아니라 다운로드 형태. → 사용자와 상의 후 **보류**하고 3순위로 이동.
@@ -50,22 +65,26 @@
 
 **커밋/푸시 완료.** `git show --stat HEAD`로 확인 결과 이 수정은 커밋 `dd7a109`(첫 대량 커밋)에 이미 포함되어 `origin/main`에 반영되어 있었음. 이후 커밋 `3781434`는 `ROADMAP.md` + 이 노트 파일 업데이트만 추가한 것. `git status` = clean, `origin/main`과 동기화 완료 확인함 (2026-07-08).
 
+**원인 1(표시 중복)도 2026-07-09에 수정 완료.** 위 "2026-07-09 (3차)" 항목 참고 — `rule_engine.py`의 good_news/bad_news 필터에서 policy/amenity/market_data 카테고리를 제외하도록 고침.
+
 **아직 안 끝난 것**
 
 1. ~~전월세 실거래가 git 커밋 & 푸시~~ **완료.** 커밋 `a77ff61` (9개 파일 변경), `origin/main`에 반영됨.
 
 2. ~~Render 환경변수 `MOLIT_API_KEY` 등록 확인~~ **완료.** Environment 탭 스크린샷으로 확인함 (2026-07-09). 매매 실거래가·전세가율 둘 다 배포 서버에서 정상 작동.
 
-3. **규제지역 지정 현황 기능 git 커밋 & 푸시 필요.**
+3. ~~규제지역 지정 현황 기능 git 커밋 & 푸시~~ **완료.** 커밋 `1ab90f3` (7개 파일 변경), `origin/main`에 반영됨. Render 자동 배포됨 (별도 환경변수 불필요, 외부 API 키 없이 동작).
+
+4. **한국은행 기준금리 기능 git 커밋 & 푸시 필요.** ECOS API는 아직 실제 키로 검증 안 함 (sample 엔드포인트로 스키마만 확인) — data.go.kr가 아니라 ecos.bok.or.kr에서 별도 회원가입 + 인증키 발급 필요. `.env`에 `ECOS_API_KEY` 추가 후 로컬에서 실제 호출 테스트 먼저 권장.
 
    ```powershell
    cd "C:\Users\OK\Desktop\주변상권분석"
    git add -A
-   git commit -m "Add regulation area (jeongjeong-daesang-jiyeok) manual list and collector"
+   git commit -m "Add Bank of Korea base rate context and fix policy/bad_news duplication"
    git push origin main
    ```
 
-4. **다음 로드맵: `ROADMAP.md` 4순위(한국은행 기준금리) 또는 5순위(청약 경쟁률).** 2순위(공식 미분양 통계)는 전국 통일 API가 없어 보류 상태 — 나중에 시/도별 파편화 API라도 부분 지원할지 다시 논의 필요. "이어서 하자"면 4순위(기준금리, ECOS API, 난이도 낮음)부터 시작 추천.
+5. **다음 로드맵: `ROADMAP.md` 5순위(청약 경쟁률).** 2순위(공식 미분양 통계)는 전국 통일 API가 없어 보류 상태 — 나중에 시/도별 파편화 API라도 부분 지원할지 다시 논의 필요.
 
 ## 프로젝트 목적
 
@@ -197,17 +216,19 @@ AI 요약이 안 보일 때 체크할 순서:
 - `market_agent/collectors/molit.py`: 국토부 아파트매매 실거래가 수집·집계
 - `market_agent/collectors/molit_rent.py`: 국토부 아파트 전월세 실거래가 수집, 전세가율 계산 (실제 키 검증 완료)
 - `market_agent/collectors/data_go_kr.py`: data.go.kr XML 응답 공통 파서
-- `market_agent/collectors/regulation.py`, `market_agent/regulation_areas.py`: 규제지역 수동 유지보수 목록/판정 (⚠️ 커밋 전)
-- `market_agent/analysis/rule_engine.py`: 점수, 전망, 인사이트 신호 계산 (market_data 카테고리 포함)
+- `market_agent/collectors/regulation.py`, `market_agent/regulation_areas.py`: 규제지역 수동 유지보수 목록/판정
+- `market_agent/collectors/ecos.py`: 한국은행 기준금리 조회, 하루 단위 캐싱 (⚠️ 커밋 전, 실제 키 검증 전)
+- `market_agent/analysis/rule_engine.py`: 점수, 전망, 인사이트 신호 계산 (market_data 카테고리 포함, good_news/bad_news에서 policy/amenity/market_data 배타 처리)
 - `market_agent/analysis/openai_analyzer.py`: OpenAI 전문가 요약 생성
-- `market_agent/templates/index.html`: 화면 구조 (실거래가/전세가율 인사이트 카드, market_signals 전체 순회)
+- `market_agent/templates/index.html`: 화면 구조 (실거래가/전세가율 인사이트 카드, market_signals 전체 순회, 기준금리 안내문)
 - `market_agent/static/styles.css`: 화면 디자인
 - `render.yaml`: Render 배포 설정
-- `tests/`: 자동 테스트 (test_keywords.py, test_molit.py, test_molit_rent.py, test_regulation_areas.py 추가, 총 60개)
+- `tests/`: 자동 테스트 (test_keywords.py, test_molit.py, test_molit_rent.py, test_regulation_areas.py, test_ecos.py 추가, 총 72개)
 
 ## 최근 반영된 커밋
 
-- 2026-07-09 (커밋 전): 규제지역 지정 현황 수동 목록 + 수집기 코드 작업 완료
+- 2026-07-09 (커밋 전): 한국은행 기준금리 연동 + 정책/주의신호 표시 중복 버그 수정
+- 2026-07-09: `1ab90f3` 규제지역 지정 현황 수동 목록 + 수집기
 - 2026-07-09: `a77ff61` 전월세 실거래가(전세가율) 수집기 + 실제 키 검증 완료
 - 2026-07-08: `3781434` 메뉴/태그 목록 오탐 수정 (keywords.py는 이미 dd7a109에 포함되어 있었음) + ROADMAP.md 추가
 - 2026-07-07: `dd7a109` 감성분석 부정어 처리, 정비사업 단계 가중치, 지역명 기반 동명이인 필터, 국토부 실거래가 API 연동

@@ -108,6 +108,10 @@
             </div>
           </div>
 
+          {% if report.base_rate_note %}
+            <p class="base-rate-note">{{ report.base_rate_note }}</p>
+          {% endif %}
+
           <section class="focus-section">
             <div class="section-heading">
               <p class="eyebrow">Insight Only</p>

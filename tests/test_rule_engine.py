@@ -245,6 +245,56 @@ class RuleEngineTests(unittest.TestCase):
         self.assertTrue(report.market_signals)
         self.assertEqual(report.market_signals[0].name, "실거래가")
 
+    def test_negative_policy_evidence_does_not_duplicate_into_bad_news(self) -> None:
+        # Regression test: a policy-category item with negative sentiment
+        # (e.g. 규제지역 지정) used to show up in both policy_signals AND
+        # bad_news because the two filters weren't mutually exclusive.
+        report = build_report(
+            address="서울시 테스트로 1",
+            radius_km=3,
+            location=None,
+            evidence=[
+                EvidenceItem(
+                    title="강남구 규제지역 지정",
+                    summary="조정대상지역 지정",
+                    source="MOLIT-Manual",
+                    category="policy",
+                    sentiment="negative",
+                    reliability=0.7,
+                    impact=-1.5,
+                    tags=["규제지역"],
+                )
+            ],
+        )
+
+        self.assertTrue(report.policy_signals)
+        self.assertFalse(report.bad_news)
+
+    def test_base_rate_note_extracted_from_tagged_evidence(self) -> None:
+        report = build_report(
+            address="서울시 테스트로 1",
+            radius_km=3,
+            location=None,
+            evidence=[
+                EvidenceItem(
+                    title="한국은행 기준금리 2.5% (기준 20260601)",
+                    summary="기준금리 안내",
+                    source="ECOS",
+                    category="policy",
+                    sentiment="neutral",
+                    reliability=0.95,
+                    impact=0.0,
+                    tags=["기준금리"],
+                )
+            ],
+        )
+
+        self.assertEqual(report.base_rate_note, "한국은행 기준금리 2.5% (기준 20260601)")
+
+    def test_base_rate_note_none_when_absent(self) -> None:
+        report = build_report(address="서울시 테스트로 1", radius_km=3, location=None, evidence=[])
+        self.assertIsNone(report.base_rate_note)
+
     def test_market_data_reduces_missing_data_limitation(self) -> None:
         from market_agent.models import GeoPoint
 

@@ -76,6 +76,7 @@ class AnalysisReport:
     evidence: list[EvidenceItem]
     limitations: list[str]
     market_signals: list[AnalysisSignal] = field(default_factory=list)
+    base_rate_note: str | None = None
     llm_commentary: str | None = None
     generated_at: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()

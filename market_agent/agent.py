@@ -4,6 +4,7 @@ from market_agent.analysis.openai_analyzer import OpenAIReportAnalyzer
 from market_agent.analysis.rule_engine import build_report
 from market_agent.collectors.base import CollectContext
 from market_agent.collectors.demo import DemoCollector
+from market_agent.collectors.ecos import BaseRateCollector, EcosClient
 from market_agent.collectors.kakao_places import KakaoAmenityCollector
 from market_agent.collectors.molit import MolitClient, MolitTransactionCollector
 from market_agent.collectors.molit_rent import JeonseRatioCollector, RentClient
@@ -145,6 +146,16 @@ class LocalMarketAgent:
                 evidence.extend(
                     JeonseRatioCollector(trade_client, rent_client).collect(context)
                 )
+            except Exception:
+                pass
+
+        # 한국은행 기준금리는 위치와 무관한 전국 공통 거시 변수라 위 블록들과
+        # 달리 molit_enabled/좌표와 무관하게 별도로 실행한다. 실패해도 조용히
+        # 넘어간다 (개별 단지에 대한 리스크가 아니라 참고용 맥락 정보이므로).
+        if self.settings.ecos_enabled:
+            try:
+                ecos_client = EcosClient(self.settings.ecos_api_key or "")
+                evidence.extend(BaseRateCollector(ecos_client).collect(context))
             except Exception:
                 pass
 

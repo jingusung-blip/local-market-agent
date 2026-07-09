@@ -14,7 +14,7 @@ def load_dotenv(path: Path) -> None:
         if not line or line.startswith("#") or "=" not in line:
             continue
         key, value = line.split("=", 1)
-        key = key.strip().lstrip("\ufeff")
+        key = key.strip().lstrip("﻿")
         value = value.strip().strip('"').strip("'")
         os.environ.setdefault(key, value)
 
@@ -28,6 +28,7 @@ class Settings:
     openai_model: str = "gpt-5.4-mini"
     openai_base_url: str | None = None
     molit_api_key: str | None = None
+    ecos_api_key: str | None = None
 
     @classmethod
     def from_env(cls, env_path: str | Path | None = None) -> "Settings":
@@ -41,6 +42,7 @@ class Settings:
             openai_model=os.getenv("OPENAI_MODEL", "gpt-5.4-mini"),
             openai_base_url=os.getenv("OPENAI_BASE_URL") or None,
             molit_api_key=os.getenv("MOLIT_API_KEY") or None,
+            ecos_api_key=os.getenv("ECOS_API_KEY") or None,
         )
 
     @property
@@ -58,3 +60,7 @@ class Settings:
     @property
     def molit_enabled(self) -> bool:
         return bool(self.molit_api_key)
+
+    @property
+    def ecos_enabled(self) -> bool:
+        return bool(self.ecos_api_key)
