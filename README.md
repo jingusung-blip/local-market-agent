@@ -16,6 +16,10 @@
 
 뉴스/정책 검색은 키워드 기반이며, 부정 키워드 주변에 "해소/완화/없음" 같은 표현이 있으면 리스크가 해소된 것으로 보정합니다. 카카오 시설 수집은 좌표와 반경을 사용하지만, 네이버 뉴스/웹 검색 결과 자체는 엄밀한 거리 필터가 아니라 지역명 매칭에 의존합니다. 리포트의 `limitations`에 이 차이를 명시합니다.
 
+## 지역 스크리닝 (`/screen`)
+
+주소를 입력하지 않아도 "어느 구를 더 자세히 볼지" 좁힐 수 있도록, 서울 25개 자치구를 대상으로 최근 3개월과 직전 3개월의 국토부 실거래 평균가를 비교해 변동률 순으로 정렬해 보여주는 페이지입니다. 기존 주소 조회 기능과 완전히 별개로 동작하며, 같은 MOLIT 실거래가/전세가 클라이언트를 재사용합니다. 표본이 5건 미만인 구는 순위에서 제외해 뒤로 보냅니다. 25개 구 x 여러 달 조회라 하루 단위로 결과를 캐싱하며, `/screen?refresh=1`로 강제 새로고침할 수 있습니다. 특정 단지를 콕 집어 예측하는 기능은 아니고, 구 단위 1차 스크리닝 용도입니다 (전국 단지 마스터 데이터가 없어 단지 단위 스크리닝은 범위 밖).
+
 ## 설치
 
 ```powershell
@@ -86,7 +90,8 @@ python -m market_agent.cli "서울특별시 강남구 테헤란로 152" --radius
 - `market_agent/collectors/ecos.py`: 한국은행 ECOS "100대 통계지표" API로 기준금리 조회, 하루 단위 캐싱
 - `market_agent/analysis/rule_engine.py`: 규칙 기반 점수화와 리포트 생성
 - `market_agent/analysis/openai_analyzer.py`: OpenAI 분석 코멘트 추가
-- `market_agent/server.py`: FastAPI 웹 UI
+- `market_agent/screener.py`: 구/동 단위 상승동력 스크리닝 (서울 25개 자치구 실거래 변동률 비교)
+- `market_agent/server.py`: FastAPI 웹 UI (`/`, `/screen`)
 - `market_agent/cli.py`: 명령행 실행
 
 ## 데이터 출처 메모

@@ -4,6 +4,21 @@
 
 ## 다음 세션에서 이어서 할 일 (2026-07-09 기준, 여기서부터 이어가면 됨)
 
+**2026-07-09 (5차): 구/동 단위 상승동력 스크리닝 신규 기능 (`/screen`) — ROADMAP 외 신규 요청**
+
+- 사용자 질문 계기: "혹시 어떤 아파트 물건지가 상승동력이 있는지 이런 예측도 보여지게 만들 수 있나?" — 기존 에이전트는 주소 1개를 입력해야만 그 주변을 알려주는 조회형 구조라, "입력 없이 후보 지역을 먼저 찾아주는" 반대 방향 기능을 요청함.
+- 아파트 단지 단위 스크리닝(전국 단지 마스터 데이터 필요, 큰 작업)과 구/동 단위 스크리닝(기존 MOLIT 시군구 벌크 조회 재사용 가능, 작은 작업) 중 사용자가 **구/동 단위**를 선택. 기존 주소 조회 기능(`/`)은 완전히 그대로 두고, 완전히 새로운 `/screen` 페이지를 추가하는 방식으로 진행 (사용자가 "폐기되냐 같이 가냐" 확인 후 "같이 간다"로 확정).
+- 코드:
+  - `market_agent/screener.py` (신규): 서울 25개 자치구(`SEOUL_DISTRICTS`, LAWD_CD 하드코딩) 대상으로 최근 3개월 vs 직전 3개월 실거래 중위가를 비교해 `pct_change`(%) 계산. 기존 `molit.py`의 `recent_year_months`/`price_per_area`, `molit_rent.py`의 `is_jeonse`/`deposit_per_area`, `regulation_areas.py`의 `is_regulated_area`를 그대로 재사용 — 새 API 연동 없이 기존 수집기 조합만으로 구현. 표본 5건 미만인 구는 `sufficient_sample=False`로 순위 밖(맨 뒤)으로 뺌 (추측성 순위 방지). `screen_districts()`가 `pct_change` 내림차순으로 정렬.
+  - `market_agent/server.py`: `/screen` GET 라우트 추가. `MOLIT_API_KEY` 없으면 안내 문구만 표시. 25개 구 x 최대 6개월 조회라 매 요청마다 돌리면 느리고 API 호출량도 커서, ECOS 기준금리와 같은 방식으로 하루 단위 프로세스 내 캐싱(`_screen_cache`) 적용. `?refresh=1`로 강제 새로고침 가능.
+  - `market_agent/templates/screen.html` (신규): 순위표(순위/자치구/실거래 변동률/전세가율/규제지역/표본) + "이 순위를 읽는 법" 주의사항 섹션 (후행지표라는 점, 구 평균이 단지별 편차를 가릴 수 있다는 점, 표본 부족/전세가율/규제목록 최신성/캐시 안내 5가지).
+  - `market_agent/templates/index.html`: 상단 네비게이션에 "지역 스크리닝" 링크 추가.
+  - `market_agent/static/styles.css`: `.nav-link`, `.screen-hero`, `.screen-facts`, `.refresh-link`, `.screen-table` 등 스타일 추가.
+  - `tests/test_screener.py` (신규, 5개): `compute_district_momentum`(표본 부족/충분 판정, pct_change/전세가율 계산, rent_client 없을 때 스킵) + `screen_districts`(정렬 순서, 기본 서울 25개 구 사용) 검증.
+- **테스트 작성 중 실수 → 디버깅**: 처음에 fake 거래 데이터의 month 키를 잘못 잡아서(최근/직전 윈도우 구분을 착각) 3개 테스트가 실패했음. `recent_year_months(date(2026,5,1), 3, offset=0/3)`을 직접 호출해 실제 산출값(recent=`202605,202604,202603` / baseline=`202602,202601,202512`)을 확인한 뒤 fake 데이터를 그 값에 맞게 수정해 해결. **추가로 이번에도 바로 그 mount-staleness 버그**가 발생 — Edit/Write로 파일을 고쳤는데도 `import`가 여전히 이전 버전을 읽는 현상 (`hasattr` 체크로 확인됨). `cat > 파일 << 'EOF'` 방식으로 강제로 다시 써서 해결. 전체 테스트 77개 통과 확인.
+- 이 기능은 원래 `ROADMAP.md` 5개 항목에 없던, 세션 중 사용자 요청으로 새로 추가된 기능임 (5순위 청약 경쟁률과는 별개).
+- 아직 커밋/푸시 전.
+
 **2026-07-09 (4차): ECOS 실제 키 검증 완료**
 
 - 사용자가 이미 발급받아둔 ECOS 인증키(비영리, 2026.03.19~2028.03.19, 상태 정상)를 `.env`에 추가. `verify_ecos_api.py`로 실제 호출 → 100개 지표 정상 수신, "한국은행 기준금리" 항목도 정확히 찾음 (현재 2.5%, 기준 20260707). 필드명(`CLASS_NAME`, `KEYSTAT_NAME`, `DATA_VALUE`, `CYCLE`, `UNIT_NAME`)이 코드와 정확히 일치해서 수정 없이 바로 동작 확인.
@@ -75,6 +90,8 @@
 
 **아직 안 끝난 것**
 
+0. **구/동 단위 상승동력 스크리닝(`/screen`) git 커밋 & 푸시** — 아직 진행 전. 위 "2026-07-09 (5차)" 항목 참고. 테스트 77개 통과 확인 완료, 문서 업데이트 완료. 다음 단계는 git add/commit/push.
+
 1. ~~전월세 실거래가 git 커밋 & 푸시~~ **완료.** 커밋 `a77ff61` (9개 파일 변경), `origin/main`에 반영됨.
 
 2. ~~Render 환경변수 `MOLIT_API_KEY` 등록 확인~~ **완료.** Environment 탭 스크린샷으로 확인함 (2026-07-09). 매매 실거래가·전세가율 둘 다 배포 서버에서 정상 작동.
@@ -83,21 +100,15 @@
 
 4. ~~한국은행 기준금리 기능 git 커밋 & 푸시~~ **완료.** 커밋 `3940c6a` (13개 파일 변경), `origin/main`에 반영됨.
 
-5. ~~ECOS 실제 키 검증~~ **완료.** 필드명 정확히 일치, 코드 수정 불필요. 다음에 이어서 할 때: 검증용 스크립트(`verify_ecos_api.py`) 삭제하고 git commit/push, 그 다음 Render 환경변수에 `ECOS_API_KEY` 등록.
-
-   ```powershell
-   cd "C:\Users\OK\Desktop\주변상권분석"
-   Remove-Item verify_ecos_api.py
-   git add -A
-   git commit -m "Add verified ECOS_API_KEY to local env docs"
-   git push origin main
-   ```
+5. ~~ECOS 실제 키 검증 + git 커밋 & 푸시~~ **완료.** 커밋 `d2b81b3` (2개 파일), `origin/main`에 반영됨.
 
    (참고: `.env`는 `.gitignore`에 포함되어 실제 키 값은 커밋되지 않음 — 위 커밋은 `verify_ecos_api.py` 삭제와 노트 정리만 반영됨)
 
-6. **Render 환경변수에 `ECOS_API_KEY` 추가.** Environment 탭 → Edit → `ECOS_API_KEY=6FZ60RLMG4T6VM8GE9EO` 추가 (매매/전월세 때와 동일한 방식).
+6. ~~Render 환경변수에 `ECOS_API_KEY` 추가~~ **완료** (2026-07-09, 사용자 확인).
 
-7. **다음 로드맵: `ROADMAP.md` 5순위(청약 경쟁률).** 2순위(공식 미분양 통계)는 전국 통일 API가 없어 보류 상태 — 나중에 시/도별 파편화 API라도 부분 지원할지 다시 논의 필요.
+**오늘(2026-07-09) 세션 요약**: 전월세 실거래가(전세가율), 규제지역 지정 현황, 한국은행 기준금리 3개 기능 전부 구현·검증·배포 완료. 정책/주의신호 표시 중복 버그도 수정. 4개 커밋(`a77ff61`, `1ab90f3`, `3940c6a`, `d2b81b3`) 전부 `origin/main`에 반영, Render 환경변수(`MOLIT_API_KEY`, `ECOS_API_KEY`) 등록도 확인 완료. 테스트 72개 통과.
+
+7. **다음 로드맵: `ROADMAP.md` 5순위(청약 경쟁률).** 2순위(공식 미분양 통계)는 전국 통일 API가 없어 보류 상태 — 나중에 시/도별 파편화 API라도 부분 지원할지 다시 논의 필요. "이어서 하자"면 5순위(청약 경쟁률, 한국부동산원_청약홈)부터 시작하면 됨.
 
 ## 프로젝트 목적
 
@@ -126,6 +137,7 @@
 - `상승동력`, `생활권`, `정책변수`, `주의신호` 4개 인사이트 제공, `MOLIT_API_KEY` 등록 시 `실거래가` 인사이트 추가
 - 각 인사이트를 클릭하면 영향도, 신뢰도, 상세 해석, 근거 링크가 펼쳐짐
 - OK저축은행 홈페이지 느낌을 참고한 주황/화이트 계열 UI
+- `/screen` 페이지: 서울 25개 자치구를 최근 3개월 vs 직전 3개월 실거래 변동률 순으로 정렬한 스크리닝 (2026-07-09 신규, 주소 입력 없이 후보 지역을 먼저 훑어보는 용도)
 - Render 배포용 `render.yaml` 포함
 
 ### 2026-07-07 정확성/효율성 개선 (부동산 전문가 리뷰 반영)
@@ -233,13 +245,16 @@ AI 요약이 안 보일 때 체크할 순서:
 - `market_agent/collectors/ecos.py`: 한국은행 기준금리 조회, 하루 단위 캐싱 (⚠️ 실제 키 검증 전)
 - `market_agent/analysis/rule_engine.py`: 점수, 전망, 인사이트 신호 계산 (market_data 카테고리 포함, good_news/bad_news에서 policy/amenity/market_data 배타 처리)
 - `market_agent/analysis/openai_analyzer.py`: OpenAI 전문가 요약 생성
-- `market_agent/templates/index.html`: 화면 구조 (실거래가/전세가율 인사이트 카드, market_signals 전체 순회, 기준금리 안내문)
+- `market_agent/screener.py`: 구/동 단위 상승동력 스크리닝 (서울 25개 자치구 실거래 변동률 비교, 기존 수집기 재사용)
+- `market_agent/templates/index.html`: 화면 구조 (실거래가/전세가율 인사이트 카드, market_signals 전체 순회, 기준금리 안내문, 지역 스크리닝 네비 링크)
+- `market_agent/templates/screen.html`: 구/동 스크리닝 결과 화면
 - `market_agent/static/styles.css`: 화면 디자인
 - `render.yaml`: Render 배포 설정
-- `tests/`: 자동 테스트 (test_keywords.py, test_molit.py, test_molit_rent.py, test_regulation_areas.py, test_ecos.py 추가, 총 72개)
+- `tests/`: 자동 테스트 (test_keywords.py, test_molit.py, test_molit_rent.py, test_regulation_areas.py, test_ecos.py, test_screener.py 추가, 총 77개)
 
 ## 최근 반영된 커밋
 
+- 2026-07-09: 구/동 단위 상승동력 스크리닝(`/screen`) — 아직 커밋 전
 - 2026-07-09: `3940c6a` 한국은행 기준금리 연동 (ECOS API 키 검증 전) + 정책/주의신호 표시 중복 버그 수정
 - 2026-07-09: `1ab90f3` 규제지역 지정 현황 수동 목록 + 수집기
 - 2026-07-09: `a77ff61` 전월세 실거래가(전세가율) 수집기 + 실제 키 검증 완료

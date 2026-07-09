@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>지역 스크리닝 - Market Insight</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='styles.css') }}?v=screen-1" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/">
+        <span class="brand-ok">MI</span>
+        <strong>Market Insight</strong>
+      </a>
+      <span class="top-note">서울 25개 자치구 실거래 모멘텀 스크리닝 (베타)</span>
+    </header>
+
+    <main class="shell">
+      <section class="hero screen-hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Screening · Beta</p>
+          <h1><span>어디가</span> 지금<br />상승세일까.</h1>
+          <p class="hero-sub">
+            서울 25개 자치구의 국토부 실거래 자료를 최근 3개월과 직전 3개월로
+            비교해 가격 변동률 순으로 정렬합니다. 특정 단지를 콕 집어 알려주는
+            기능이 아니라, "어느 구를 더 자세히 볼지" 좁히는 1차 스크리닝
+            용도입니다.
+          </p>
+        </div>
+      </section>
+
+      {% if error %}
+        <section class="notice error">{{ error }}</section>
+      {% elif results %}
+        <section class="insight-board" id="screen-result">
+          <div class="quick-facts screen-facts">
+            <div>
+              <span>대상</span>
+              <strong>서울 25개 자치구</strong>
+            </div>
+            <div>
+              <span>비교 기준</span>
+              <strong>최근 3개월 vs 직전 3개월</strong>
+            </div>
+            <div>
+              <span>기준일</span>
+              <strong>{{ generated_at }}</strong>
+            </div>
+            <div>
+              <a class="refresh-link" href="/screen?refresh=1">지금 새로고침</a>
+            </div>
+          </div>
+
+          <table class="screen-table">
+            <thead>
+              <tr>
+                <th>순위</th>
+                <th>자치구</th>
+                <th>실거래 변동률</th>
+                <th>전세가율</th>
+                <th>규제지역</th>
+                <th>표본(최근/직전)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for item in results %}
+                <tr class="{{ 'muted-row' if not item.sufficient_sample else '' }}">
+                  <td>{{ loop.index }}</td>
+                  <td>{{ item.name }}</td>
+                  {% if item.sufficient_sample %}
+                    <td class="{{ 'up' if item.pct_change > 0 else ('down' if item.pct_change < 0 else '') }}">
+                      {{ "%+.2f"|format(item.pct_change) }}%
+                    </td>
+                    <td>{{ item.jeonse_ratio ~ "%" if item.jeonse_ratio is not none else "-" }}</td>
+                  {% else %}
+                    <td colspan="2">표본 부족 (순위 제외)</td>
+                  {% endif %}
+                  <td>{{ "지정" if item.regulated else "-" }}</td>
+                  <td>{{ item.recent_sample }}건 / {{ item.baseline_sample }}건</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+
+          <section class="notice">
+            <div>
+              <p class="eyebrow">Check Point</p>
+              <h3>이 순위를 읽는 법</h3>
+              <p>
+                가격이 오를 것이라는 예측이 아니라, 최근 국토부 공개 실거래
+                자료 기준으로 "이미 오르고 있는 구"를 찾는 후행 지표입니다.
+              </p>
+            </div>
+            <ul>
+              <li>구 전체 평균이라 같은 구 안에서도 단지별 편차가 클 수 있습니다. 순위 상위 구를 확인한 뒤에는 반드시 기존 주소 조회 기능으로 특정 단지를 다시 확인하세요.</li>
+              <li>거래량이 적은 구/시기에는 변동률이 과장되게 나올 수 있습니다 (표본 5건 미만은 순위에서 제외했습니다).</li>
+              <li>전세가율은 순수 전세 거래만 반영했고, 표본이 3건 미만이면 "-"로 표시됩니다.</li>
+              <li>규제지역 여부는 수동 유지보수 목록 기준이며, 최신 지정/해제는 국토교통부 고시로 재확인하세요.</li>
+              <li>결과는 하루 단위로 캐시됩니다. 최신 데이터가 필요하면 "지금 새로고침"을 누르세요.</li>
+            </ul>
+          </section>
+        </section>
+      {% else %}
+        <section class="empty-state">
+          <p class="eyebrow">Not Ready</p>
+          <h2>MOLIT_API_KEY가 설정되어야 스크리닝을 실행할 수 있습니다.</h2>
+        </section>
+      {% endif %}
+    </main>
+  </body>
+</html>

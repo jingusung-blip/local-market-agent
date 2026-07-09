@@ -703,3 +703,70 @@ button:hover {
     padding: 22px;
   }
 }
+
+/* 지역 스크리닝 페이지 */
+
+.nav-link {
+  color: var(--brown-2);
+  font-weight: 900;
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+}
+
+.nav-link:hover {
+  border-bottom-color: var(--orange);
+}
+
+.screen-hero h1 {
+  font-size: clamp(2.4rem, 5vw, 4rem);
+}
+
+.screen-facts {
+  grid-template-columns: repeat(4, 1fr) !important;
+  align-items: center;
+}
+
+.refresh-link {
+  color: var(--orange);
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.screen-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 24px 0;
+  background: white;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 20px 48px rgba(24, 34, 51, 0.08);
+}
+
+.screen-table th,
+.screen-table td {
+  padding: 14px 16px;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.95rem;
+}
+
+.screen-table th {
+  background: var(--cream);
+  color: var(--brown-2);
+  font-size: 0.82rem;
+  text-transform: uppercase;
+}
+
+.screen-table tr.muted-row {
+  color: var(--muted);
+}
+
+.screen-table td.up {
+  color: var(--orange);
+  font-weight: 900;
+}
+
+.screen-table td.down {
+  color: var(--blue);
+  font-weight: 900;
+}
