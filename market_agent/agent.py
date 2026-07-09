@@ -7,6 +7,7 @@ from market_agent.collectors.demo import DemoCollector
 from market_agent.collectors.kakao_places import KakaoAmenityCollector
 from market_agent.collectors.molit import MolitClient, MolitTransactionCollector
 from market_agent.collectors.molit_rent import JeonseRatioCollector, RentClient
+from market_agent.collectors.regulation import RegulationAreaCollector
 from market_agent.collectors.naver import NaverNewsPolicyCollector, NaverSearchClient
 from market_agent.config import Settings
 from market_agent.geo import KakaoLocalClient
@@ -87,6 +88,13 @@ class LocalMarketAgent:
                         impact=-0.4,
                     )
                 )
+
+        # 규제지역 지정 여부는 외부 API 호출 없이 수동 유지보수 목록으로 판단하므로
+        # 별도 설정 키 없이, 좌표만 있으면 항상 시도한다.
+        try:
+            evidence.extend(RegulationAreaCollector().collect(context))
+        except Exception:
+            pass
 
         if self.settings.naver_enabled:
             try:

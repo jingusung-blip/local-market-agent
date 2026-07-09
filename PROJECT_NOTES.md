@@ -4,7 +4,17 @@
 
 ## 다음 세션에서 이어서 할 일 (2026-07-09 기준, 여기서부터 이어가면 됨)
 
-**2026-07-09: 전월세 실거래가(전세가율) 구현 + 실제 키 검증 완료**
+**2026-07-09 (2차): 규제지역 지정 현황 반영 완료, 미분양 통계는 보류**
+
+- `ROADMAP.md` 2순위(공식 미분양 통계)를 먼저 조사했으나, 실제로는 전국 통일 API가 없다는 걸 확인함. 원래 로드맵에 적어뒀던 "한국부동산원_부동산통계 조회 서비스(15134761)"는 2022년 API 개편 공지를 보니 미분양을 다루지 않고(주간아파트동향/주택가격동향/실거래가격지수 등 8종뿐), data.go.kr에서 "미분양" 검색 결과 국토부 차원 통합 API는 없고 **시/도별로 파편화**되어 있음 (경기도·부산광역시·경상남도 등 일부 지자체만 자체 API 보유, 서울은 API 자체가 없음). 국토부 통계누리 전국 통합 "미분양주택현황보고"도 API가 아니라 다운로드 형태. → 사용자와 상의 후 **보류**하고 3순위로 이동.
+- **3순위(규제지역 지정 현황) 구현 완료.**
+  - `market_agent/regulation_areas.py` (신규): 조정대상지역/투기과열지구 수동 유지보수 목록. 공식 API가 없어(ROADMAP에 이미 명시돼 있던 문제) 뉴스 발표를 근거로 사람이 갱신. WebSearch로 확인한 현재(2026-07-09) 지정 현황: 서울 25개 자치구 전역 + 경기 15곳(과천·광명·성남 분당/수정/중원·수원 영통/장안/팔달·안양 동안·용인 수지·의왕·하남 — 2025-10-15 지정, + 화성 동탄구·용인 기흥구·구리시 — 2026-07-01 추가). 출처: 대한민국 정책브리핑(2025-10-15 공식 발표) + 부동산케이스노트 블로그(2026-07-01 갱신, 1차 출처 아님, 실사용 전 국토부 고시 재확인 권장 문구를 evidence summary에 항상 포함).
+  - `market_agent/collectors/regulation.py` (신규): `RegulationAreaCollector`, 좌표만 있으면 항상 실행(외부 API 호출 없음, 별도 키 불필요), category="policy"라 기존 rule_engine 정책 카테고리 로직을 그대로 재사용 (추가 변경 불필요).
+  - `market_agent/agent.py`: `RegulationAreaCollector`를 `_collect()`에 추가.
+  - `tests/test_regulation_areas.py` (신규, 8개). 전체 테스트 60개 통과.
+- 아직 커밋/푸시 전. 아래 "아직 안 끝난 것" 참고.
+
+**2026-07-09 (1차): 전월세 실거래가(전세가율) 구현 + 실제 키 검증 완료**
 
 - `ROADMAP.md` 1순위 작업. data.go.kr "국토교통부_아파트 전월세 실거래가 자료" 활용신청 승인 완료 (자동승인, 활용기간 2026-07-09~2028-07-09). End Point가 `https://apis.data.go.kr/1613000/RTMSDataSvcAptRent/getRTMSDataSvcAptRent`로 코드에 미리 넣어둔 값과 정확히 일치했고, 인증키도 기존 `MOLIT_API_KEY`를 그대로 재사용 (계정 단위 키라 매매/전월세 공용).
 - 코드:
@@ -42,19 +52,20 @@
 
 **아직 안 끝난 것**
 
-1. **git 커밋 & 푸시.** 검증용 임시 스크립트(`verify_rent_api.py`, `verify_jeonse_ratio.py`)는 삭제하고 커밋:
+1. ~~전월세 실거래가 git 커밋 & 푸시~~ **완료.** 커밋 `a77ff61` (9개 파일 변경), `origin/main`에 반영됨.
+
+2. ~~Render 환경변수 `MOLIT_API_KEY` 등록 확인~~ **완료.** Environment 탭 스크린샷으로 확인함 (2026-07-09). 매매 실거래가·전세가율 둘 다 배포 서버에서 정상 작동.
+
+3. **규제지역 지정 현황 기능 git 커밋 & 푸시 필요.**
 
    ```powershell
    cd "C:\Users\OK\Desktop\주변상권분석"
-   Remove-Item verify_rent_api.py, verify_jeonse_ratio.py
    git add -A
-   git commit -m "Add jeonse ratio (rent transaction) collector"
+   git commit -m "Add regulation area (jeongjeong-daesang-jiyeok) manual list and collector"
    git push origin main
    ```
 
-2. **Render 환경변수 `MOLIT_API_KEY` 등록이 끝났는지 확인.**
-
-3. **다음 기능 로드맵은 `ROADMAP.md` 참고.** 전월세 실거래가(전세가율, 완료) 다음은 공식 미분양 통계, 규제지역 지정 현황, 한국은행 기준금리, 청약 경쟁률 순.
+4. **다음 로드맵: `ROADMAP.md` 4순위(한국은행 기준금리) 또는 5순위(청약 경쟁률).** 2순위(공식 미분양 통계)는 전국 통일 API가 없어 보류 상태 — 나중에 시/도별 파편화 API라도 부분 지원할지 다시 논의 필요. "이어서 하자"면 4순위(기준금리, ECOS API, 난이도 낮음)부터 시작 추천.
 
 ## 프로젝트 목적
 
@@ -184,18 +195,20 @@ AI 요약이 안 보일 때 체크할 순서:
 - `market_agent/collectors/kakao_places.py`: 주변 생활 인프라 수집
 - `market_agent/collectors/naver.py`: 네이버 뉴스/정책 수집, 최신 뉴스 필터, 지역명 기반 오탐 필터
 - `market_agent/collectors/molit.py`: 국토부 아파트매매 실거래가 수집·집계
-- `market_agent/collectors/molit_rent.py`: 국토부 아파트 전월세 실거래가 수집, 전세가율 계산 (⚠️ 실제 키 검증 대기중)
+- `market_agent/collectors/molit_rent.py`: 국토부 아파트 전월세 실거래가 수집, 전세가율 계산 (실제 키 검증 완료)
 - `market_agent/collectors/data_go_kr.py`: data.go.kr XML 응답 공통 파서
+- `market_agent/collectors/regulation.py`, `market_agent/regulation_areas.py`: 규제지역 수동 유지보수 목록/판정 (⚠️ 커밋 전)
 - `market_agent/analysis/rule_engine.py`: 점수, 전망, 인사이트 신호 계산 (market_data 카테고리 포함)
 - `market_agent/analysis/openai_analyzer.py`: OpenAI 전문가 요약 생성
 - `market_agent/templates/index.html`: 화면 구조 (실거래가/전세가율 인사이트 카드, market_signals 전체 순회)
 - `market_agent/static/styles.css`: 화면 디자인
 - `render.yaml`: Render 배포 설정
-- `tests/`: 자동 테스트 (test_keywords.py, test_molit.py, test_molit_rent.py 추가, 총 52개)
+- `tests/`: 자동 테스트 (test_keywords.py, test_molit.py, test_molit_rent.py, test_regulation_areas.py 추가, 총 60개)
 
 ## 최근 반영된 커밋
 
-- 2026-07-09 (커밋 전): 전월세 실거래가(전세가율) 수집기 코드 작업 완료, 실제 키 검증 대기
+- 2026-07-09 (커밋 전): 규제지역 지정 현황 수동 목록 + 수집기 코드 작업 완료
+- 2026-07-09: `a77ff61` 전월세 실거래가(전세가율) 수집기 + 실제 키 검증 완료
 - 2026-07-08: `3781434` 메뉴/태그 목록 오탐 수정 (keywords.py는 이미 dd7a109에 포함되어 있었음) + ROADMAP.md 추가
 - 2026-07-07: `dd7a109` 감성분석 부정어 처리, 정비사업 단계 가중치, 지역명 기반 동명이인 필터, 국토부 실거래가 API 연동
 - `d69e05e`: 인사이트 화면 단순화, 단지명만 입력해도 분석 가능
