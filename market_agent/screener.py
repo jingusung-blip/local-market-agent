@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import statistics
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import date
 from typing import Any
@@ -25,6 +26,14 @@ RECENT_WINDOW_MONTHS = 3
 BASELINE_WINDOW_MONTHS = 3
 MIN_TRADE_SAMPLE = 5
 MIN_JEONSE_SAMPLE = 3
+
+# 구 하나당 최대 6~9번(최근 3개월 + 직전 3개월 + 전세 3개월)의 실제 data.go.kr
+# HTTP 호출이 필요하다. 25개 구를 순차로 돌리면 최악의 경우 150~225번의
+# 네트워크 왕복이 직렬로 쌓여 Render 배포 환경에서 응답이 몇 분씩 걸리거나
+# 아예 타임아웃나는 문제가 있었다 (2026-07-10, 실사용 중 "계속 로딩만 됨"
+# 버그로 발견). 구 단위는 서로 완전히 독립적인 조회라 스레드로 병렬 처리해
+# 전체 소요 시간을 25배가 아니라 대략 "가장 느린 구 1개" 수준으로 줄인다.
+MAX_PARALLEL_DISTRICTS = 8
 
 # 서울 25개 자치구 법정동코드(첫 5자리, LAWD_CD). 행정표준코드관리시스템
 # (code.go.kr)의 법정동코드 기준이며, 행정동코드와는 다르므로 혼동 주의.
@@ -149,10 +158,15 @@ def screen_districts(
     표본이 부족한(sufficient_sample=False) 지역은 순위 매기지 않고 목록
     맨 뒤로 보낸다 (추측성 순위를 만들지 않기 위함)."""
     targets = districts if districts is not None else SEOUL_DISTRICTS
-    results = [
-        compute_district_momentum(trade_client, rent_client, code, name, reference_date)
-        for code, name in targets
-    ]
+
+    with ThreadPoolExecutor(max_workers=MAX_PARALLEL_DISTRICTS) as executor:
+        futures = [
+            executor.submit(
+                compute_district_momentum, trade_client, rent_client, code, name, reference_date
+            )
+            for code, name in targets
+        ]
+        results = [future.result() for future in futures]
 
     def sort_key(item: DistrictMomentum) -> tuple[int, float]:
         if not item.sufficient_sample:
