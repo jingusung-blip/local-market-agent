@@ -142,9 +142,6 @@
                   {% if report.good_news %}
                     <strong>{{ report.good_news[0].name }}</strong>
                     <p>{{ report.good_news[0].rationale }}</p>
-                  {% elif report.local_factors %}
-                    <strong>{{ report.local_factors[0].name }}</strong>
-                    <p>{{ report.local_factors[0].rationale }}</p>
                   {% else %}
                     <strong>뚜렷한 호재 없음</strong>
                     <p>현재 수집 근거에서는 강한 상승 재료가 확인되지 않았습니다.</p>
@@ -165,14 +162,15 @@
                         {% endfor %}
                       </div>
                     {% endif %}
-                  {% elif report.local_factors %}
-                    <div class="detail-metrics">
-                      <div><span>영향도</span><strong>{{ report.local_factors[0].impact }}</strong></div>
-                      <div><span>신뢰도</span><strong>{{ (report.local_factors[0].confidence * 100) | round | int }}%</strong></div>
-                    </div>
-                    <p>뚜렷한 뉴스 호재가 부족할 때는 생활권 경쟁력이 기본 수요를 지지하는지 봅니다. 주변 편의시설 밀도와 접근성은 실거주 선호를 유지하는 요인으로 반영했습니다.</p>
                   {% else %}
-                    <p>현재 수집 범위에서는 상승 재료가 약합니다. 교통 계획, 정비사업, 학군 변화, 대형 상권 유입 여부를 추가로 확인하면 판단력이 올라갑니다.</p>
+                    <p>
+                      생활 인프라(학교·마트·교통 등)가 풍부해도 그 자체는 "상승동력"이 아니라
+                      이미 현재 시세에 반영돼 있는 기반 수요 요인입니다. 상승동력은 재건축·재개발
+                      이주 계획, 신규 교통망 발표, 대형 상업시설 입점처럼 <strong>앞으로 시세에 새로
+                      영향을 줄 변화</strong>가 있어야 잡히는데, 지금은 그런 뉴스·정책 근거가 수집되지
+                      않았습니다. 교통 계획, 정비사업 진행 단계, 학군 변화, 대형 상권 유입 여부를
+                      직접 확인해보세요.
+                    </p>
                   {% endif %}
                 </div>
               </details>
