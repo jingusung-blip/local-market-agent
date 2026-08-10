@@ -217,7 +217,12 @@ def calculate_confidence(evidence: list[EvidenceItem], location: GeoPoint | None
     confidence = 0.18
     confidence += min(0.3, len(evidence) * 0.015)
     if location:
-        confidence += 0.18
+        # "kakao-keyword"는 정확한 주소 검색이 실패해 느슨한 장소/키워드
+        # 검색으로 추정한 위치다. 실제로 존재하지 않는 주소도 비슷한 이름의
+        # 엉뚱한 장소에 매칭될 수 있으므로, 정확한 도로명/지번 주소 매칭
+        # ("kakao")보다 신뢰도 가점을 크게 낮춘다 (2026-08-10 실사용 피드백:
+        # 존재하지 않는 주소인데도 신뢰도가 90%로 표시되는 문제).
+        confidence += 0.18 if location.source == "kakao" else 0.04
     if any(item.category == "policy" for item in evidence):
         confidence += 0.12
     if any(item.category == "news" for item in evidence):

@@ -88,6 +88,28 @@ class BuildJeonseEvidenceTests(unittest.TestCase):
 
         self.assertIn("데이터부족", evidence[0].tags)
 
+    def test_title_includes_trend_direction_when_baseline_provided(self) -> None:
+        # Regression test (2026-08-10 실사용 피드백): 전세가율이 "63.2%다"처럼
+        # 스냅샷 숫자만 나오고 최근 오르는지 내리는지 방향이 없다는 지적.
+        # 직전 3개월 데이터를 같이 주면 제목/요약에 방향(%p 변화)이 나와야 한다.
+        trades = [trade("A", "대치동", f"{150000 + i * 10}", "84") for i in range(4)]
+        rents = [rent("A", "대치동", f"{127000 + i * 10}", "0", "84") for i in range(4)]  # ~85%
+        baseline_trades = [trade("A", "대치동", f"{150000 + i * 10}", "84") for i in range(4)]
+        baseline_rents = [rent("A", "대치동", f"{105000 + i * 10}", "0", "84") for i in range(4)]  # ~70%
+
+        evidence = build_jeonse_evidence(trades, rents, baseline_trades, baseline_rents)
+
+        self.assertIn("직전 3개월 대비", evidence[0].title)
+        self.assertIn("+", evidence[0].title)
+
+    def test_title_omits_trend_when_baseline_insufficient(self) -> None:
+        trades = [trade("A", "대치동", f"{150000 + i * 10}", "84") for i in range(4)]
+        rents = [rent("A", "대치동", f"{127000 + i * 10}", "0", "84") for i in range(4)]
+
+        evidence = build_jeonse_evidence(trades, rents, baseline_trade_records=[], baseline_rent_records=[])
+
+        self.assertNotIn("직전 3개월 대비", evidence[0].title)
+
 
 class FakeTradeClient:
     def __init__(self, records_by_month: dict[str, list[dict]]) -> None:
@@ -177,6 +199,49 @@ class JeonseRatioCollectorTests(unittest.TestCase):
         # "데이터부족" evidence item rather than raising.
         self.assertEqual(len(evidence), 1)
         self.assertIn("데이터부족", evidence[0].tags)
+
+    def test_collect_fetches_baseline_months_and_shows_trend(self) -> None:
+        # Regression test (2026-08-10): the collector now also fetches the
+        # prior 3-month window (offset=3) so build_jeonse_evidence can show
+        # a "직전 3개월 대비" trend instead of a bare snapshot ratio.
+        reference = date(2026, 5, 1)
+        # recent=202605,202604,202603 / baseline=202602,202601,202512
+        # (matches recent_year_months(reference, 3, offset=3) exactly).
+        trade_records = {
+            month: [trade("래미안", "대치동", f"{150000 + i}", "84")]
+            for i, month in enumerate(
+                ["202605", "202604", "202603", "202602", "202601", "202512"]
+            )
+        }
+        rent_records = {
+            "202605": [rent("래미안", "대치동", "127,000", "0", "84")],
+            "202604": [rent("래미안", "대치동", "127,000", "0", "84")],
+            "202603": [rent("래미안", "대치동", "127,000", "0", "84")],
+            "202602": [rent("래미안", "대치동", "105,000", "0", "84")],
+            "202601": [rent("래미안", "대치동", "105,000", "0", "84")],
+            "202512": [rent("래미안", "대치동", "105,000", "0", "84")],
+        }
+        collector = JeonseRatioCollector(
+            FakeTradeClient(trade_records), FakeRentClient(rent_records), reference_date=reference
+        )
+        location = GeoPoint(
+            address="서울 강남구 대치동",
+            latitude=37.5,
+            longitude=127.0,
+            region_3depth="대치동",
+            b_code="1168010100",
+        )
+        context = CollectContext(
+            address="서울 강남구 대치동",
+            radius_km=3,
+            apartment_name="래미안",
+            location=location,
+        )
+
+        evidence = collector.collect(context)
+
+        self.assertEqual(len(evidence), 1)
+        self.assertIn("직전 3개월 대비", evidence[0].title)
 
 
 if __name__ == "__main__":

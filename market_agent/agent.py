@@ -54,10 +54,22 @@ class LocalMarketAgent:
             return None, ["카카오 API 키가 없어 좌표와 반경 데이터를 조회하지 못했습니다."]
 
         client = KakaoLocalClient(self.settings.kakao_rest_api_key or "")
+        limitations: list[str] = []
         try:
             point = client.geocode(target)
             if not point:
                 point = client.keyword_geocode(target)
+                if point:
+                    # 정확한 도로명/지번 주소로 찾지 못해 느슨한 키워드/장소
+                    # 검색으로 대체한 결과다. 입력한 주소가 실제로 존재하지
+                    # 않아도 비슷한 이름의 다른 장소가 매칭될 수 있으므로
+                    # 사용자에게 반드시 알린다.
+                    limitations.append(
+                        "정확한 도로명/지번 주소로 위치를 찾지 못해, 입력값과 "
+                        "가장 비슷한 장소명을 기준으로 위치를 추정했습니다 "
+                        f"(추정된 주소: {point.address}). 입력한 주소가 실제로 "
+                        "존재하지 않아도 결과가 나올 수 있으니 주소를 다시 확인하세요."
+                    )
         except Exception as exc:
             return None, [f"카카오 위치 조회 실패: {exc}"]
 
@@ -65,7 +77,7 @@ class LocalMarketAgent:
             return None, [
                 "입력값으로 위치를 찾지 못했습니다. 도로명주소, 지번주소, 또는 단지명을 더 구체적으로 입력하세요."
             ]
-        return point, []
+        return point, limitations
 
     def _collect(self, context: CollectContext, offline: bool) -> list[EvidenceItem]:
         if offline or not (self.settings.kakao_enabled or self.settings.naver_enabled):

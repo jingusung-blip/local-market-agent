@@ -96,8 +96,26 @@ def deposit_per_area(record: dict[str, Any]) -> float | None:
     return deposit / area  # 만원 per m²
 
 
-def build_jeonse_evidence(
+def _jeonse_ratio_only(
     trade_records: list[dict[str, Any]], rent_records: list[dict[str, Any]]
+) -> float | None:
+    """Returns just the 전세가율(%) for a period, or None if either side has
+    fewer than MIN_SAMPLE_SIZE comparable records. Used for the baseline
+    period, where we only need the ratio to compare against the current one."""
+    trade_prices = [p for p in (price_per_area(r) for r in trade_records) if p]
+    jeonse_prices = [
+        p for p in (deposit_per_area(r) for r in rent_records if is_jeonse(r)) if p
+    ]
+    if len(trade_prices) < MIN_SAMPLE_SIZE or len(jeonse_prices) < MIN_SAMPLE_SIZE:
+        return None
+    return (statistics.median(jeonse_prices) / statistics.median(trade_prices)) * 100
+
+
+def build_jeonse_evidence(
+    trade_records: list[dict[str, Any]],
+    rent_records: list[dict[str, Any]],
+    baseline_trade_records: list[dict[str, Any]] | None = None,
+    baseline_rent_records: list[dict[str, Any]] | None = None,
 ) -> list[EvidenceItem]:
     trade_prices = [p for p in (price_per_area(r) for r in trade_records) if p]
     jeonse_records = [r for r in rent_records if is_jeonse(r)]
@@ -151,13 +169,40 @@ def build_jeonse_evidence(
 
     impact = round(max(-4.0, min(4.0, (ratio - 60) * 0.08)), 2)
 
+    # 직전 3개월과 비교한 방향성. 상무님 실사용 피드백(2026-08-10): "그냥
+    # 63.2%다 이래만 나와 있네", "최근에 올라갔다 내려갔다 이런 말이 없노"
+    # -- 스냅샷 숫자만으로는 최근 추세를 알 수 없다는 지적. 매매 실거래가
+    # 카드(build_market_evidence)는 이미 "직전 3개월 대비 +x%" 형태로 방향을
+    # 보여주고 있어, 전세가율도 같은 방식으로 맞춘다. 표본 부족 등으로
+    # 직전 분기 비율을 못 구하면(None) 트렌드 문구 없이 스냅샷만 보여준다.
+    baseline_ratio = (
+        _jeonse_ratio_only(baseline_trade_records, baseline_rent_records)
+        if baseline_trade_records and baseline_rent_records
+        else None
+    )
+    if baseline_ratio is not None:
+        ratio_change = ratio - baseline_ratio
+        title = (
+            f"전세가율 {ratio:.1f}%, 직전 3개월 대비 {ratio_change:+.1f}%p "
+            f"(전세 중위 {jeonse_median:,.0f}만원/㎡, 매매 중위 {trade_median:,.0f}만원/㎡)"
+        )
+        summary = (
+            "국토부 아파트 매매·전세 실거래 자료 기준 최근 3개월 중위가로 계산한 전세가율을 "
+            f"직전 3개월(전세가율 {baseline_ratio:.1f}%)과 비교했습니다 "
+            f"(매매 표본 {len(trade_prices)}건, 전세 표본 {len(jeonse_prices)}건)."
+        )
+    else:
+        title = f"전세가율 {ratio:.1f}% (전세 중위 {jeonse_median:,.0f}만원/㎡, 매매 중위 {trade_median:,.0f}만원/㎡)"
+        summary = (
+            "국토부 아파트 매매·전세 실거래 자료 기준 최근 3개월 중위가로 계산한 전세가율입니다 "
+            f"(매매 표본 {len(trade_prices)}건, 전세 표본 {len(jeonse_prices)}건). "
+            "직전 3개월 비교 데이터가 부족해 방향성 비교는 생략했습니다."
+        )
+
     return [
         EvidenceItem(
-            title=f"전세가율 {ratio:.1f}% (전세 중위 {jeonse_median:,.0f}만원/㎡, 매매 중위 {trade_median:,.0f}만원/㎡)",
-            summary=(
-                "국토부 아파트 매매·전세 실거래 자료 기준 최근 3개월 중위가로 계산한 전세가율입니다 "
-                f"(매매 표본 {len(trade_prices)}건, 전세 표본 {len(jeonse_prices)}건)."
-            ),
+            title=title,
+            summary=summary,
             source="MOLIT",
             category="market_data",
             sentiment=sentiment,
@@ -191,6 +236,7 @@ class JeonseRatioCollector:
         apartment_name = context.apartment_name
 
         recent_months = recent_year_months(self.reference_date, 3, offset=0)
+        baseline_months = recent_year_months(self.reference_date, 3, offset=3)
 
         trade_records = filter_relevant(
             self._fetch_months(self.trade_client.fetch_trades, lawd_cd, recent_months),
@@ -202,8 +248,20 @@ class JeonseRatioCollector:
             region_3depth,
             apartment_name,
         )
+        baseline_trade_records = filter_relevant(
+            self._fetch_months(self.trade_client.fetch_trades, lawd_cd, baseline_months),
+            region_3depth,
+            apartment_name,
+        )
+        baseline_rent_records = filter_relevant(
+            self._fetch_months(self.rent_client.fetch_rents, lawd_cd, baseline_months),
+            region_3depth,
+            apartment_name,
+        )
 
-        return build_jeonse_evidence(trade_records, rent_records)
+        return build_jeonse_evidence(
+            trade_records, rent_records, baseline_trade_records, baseline_rent_records
+        )
 
     def _fetch_months(self, fetch_fn, lawd_cd: str, months: list[str]) -> list[dict[str, Any]]:
         records: list[dict[str, Any]] = []

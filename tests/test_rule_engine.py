@@ -341,6 +341,45 @@ class RuleEngineTests(unittest.TestCase):
             any("실거래가 API" in item for item in without_market_data.limitations)
         )
 
+    def test_fuzzy_keyword_location_gets_lower_confidence_than_exact_match(self) -> None:
+        # Regression test (2026-08-10 실사용 피드백): 존재하지 않는 주소를
+        # 입력해도 카카오 키워드 검색이 엉뚱한 장소에 느슨하게 매칭되면
+        # 신뢰도가 정확한 주소 매칭과 똑같이 높게 나오는 문제가 있었다.
+        # source="kakao-keyword"(느슨한 매칭)는 source="kakao"(정확한 주소
+        # 매칭)보다 신뢰도 가점이 낮아야 한다.
+        from market_agent.models import GeoPoint
+
+        evidence = [
+            EvidenceItem(
+                title="교통 호재 확정",
+                summary="지하철 개통 확정",
+                source="test",
+                category="news",
+                sentiment="positive",
+                reliability=0.9,
+                impact=5,
+                tags=["교통"],
+            )
+        ]
+        exact_location = GeoPoint(
+            address="서울시 테스트로 1", latitude=37.5, longitude=127.0, source="kakao"
+        )
+        fuzzy_location = GeoPoint(
+            address="서울시 테스트로 1",
+            latitude=37.5,
+            longitude=127.0,
+            source="kakao-keyword",
+        )
+
+        exact_report = build_report(
+            address="서울시 테스트로 1", radius_km=3, location=exact_location, evidence=evidence
+        )
+        fuzzy_report = build_report(
+            address="존재하지않는주소 999", radius_km=3, location=fuzzy_location, evidence=evidence
+        )
+
+        self.assertLess(fuzzy_report.confidence, exact_report.confidence)
+
     def test_signal_rationale_prefers_newer_evidence(self) -> None:
         old_date = format_datetime(datetime(2024, 1, 1, tzinfo=timezone.utc), usegmt=True)
         new_date = format_datetime(datetime(2026, 5, 1, tzinfo=timezone.utc), usegmt=True)
