@@ -25,6 +25,10 @@ GOOD_QUERIES = [
     "{target} 교통 지하철 GTX",
     "{target} 재건축 재개발 정비사업",
     "{target} 상권 업무지구 일자리",
+    # 2026-08-10 실사용 미팅 피드백: 재건축 이주 계획, 시설 이전으로 인한
+    # 부지 개발처럼 "앞으로의 변화"를 알리는 뉴스를 기존 쿼리들이 놓치고
+    # 있었음. 이주/이전/신설을 직접 겨냥한 쿼리를 추가.
+    "{target} 이주 이전 신설",
 ]
 
 BAD_QUERIES = [
@@ -142,6 +146,7 @@ class NaverNewsPolicyCollector:
 
         for item in evidence:
             apply_region_relevance(item, context.target_text, region_tokens)
+            apply_source_domain_reliability(item)
 
         return sort_evidence_by_recency(evidence)
 
@@ -257,6 +262,47 @@ def apply_region_relevance(
     item.impact = round(item.impact * 0.6, 2)
     if "지역확인필요" not in item.tags:
         item.tags = sorted(set(item.tags) | {"지역확인필요"})
+
+
+# 2026-08-10 실사용 미팅 피드백: "블로그나 카더라 정보보다는 믿을 만한 것만
+# 가지고 예측해야 한다"는 지적. 정책 신뢰도를 URL 텍스트 매칭만으로 판단하던
+# 기존 방식은 출처가 정부 공식 사이트인지, 개인 블로그/카페인지를 구분하지
+# 않았음. URL 도메인으로 공식 출처는 가점, 블로그/카페성 출처는 감점한다.
+OFFICIAL_DOMAIN_SUFFIXES = (".go.kr",)
+BLOG_DOMAIN_MARKERS = (
+    "blog.naver.com",
+    "post.naver.com",
+    "cafe.naver.com",
+    "tistory.com",
+    "brunch.co.kr",
+    "youtube.com",
+    "youtu.be",
+)
+
+
+def classify_source_domain(url: str | None) -> str:
+    """'official'(.go.kr 등 정부 도메인) / 'blog'(블로그·카페·영상 플랫폼) /
+    'unknown'(그 외, 대부분 언론사) 중 하나를 반환한다."""
+    if not url:
+        return "unknown"
+    host = urllib.parse.urlparse(url).netloc.lower()
+    if host.endswith(OFFICIAL_DOMAIN_SUFFIXES):
+        return "official"
+    if any(marker in host for marker in BLOG_DOMAIN_MARKERS):
+        return "blog"
+    return "unknown"
+
+
+def apply_source_domain_reliability(item: EvidenceItem) -> None:
+    domain_type = classify_source_domain(item.url)
+    if domain_type == "official":
+        item.reliability = round(min(0.95, item.reliability * 1.15), 2)
+        if "공식출처" not in item.tags:
+            item.tags = sorted(set(item.tags) | {"공식출처"})
+    elif domain_type == "blog":
+        item.reliability = round(max(0.1, item.reliability * 0.75), 2)
+        if "블로그출처" not in item.tags:
+            item.tags = sorted(set(item.tags) | {"블로그출처"})
 
 
 def parse_search_date(value: str | None) -> datetime | None:

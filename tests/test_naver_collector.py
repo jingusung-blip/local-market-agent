@@ -4,9 +4,12 @@ from email.utils import format_datetime
 
 from market_agent.collectors.base import CollectContext
 from market_agent.collectors.naver import (
+    GOOD_QUERIES,
     NaverNewsPolicyCollector,
     apply_region_relevance,
+    apply_source_domain_reliability,
     build_search_target,
+    classify_source_domain,
     is_recent_news_item,
     recency_multiplier,
 )
@@ -137,6 +140,52 @@ class NaverCollectorTests(unittest.TestCase):
 
         self.assertEqual(item.reliability, 0.8)
         self.assertNotIn("지역확인필요", item.tags)
+
+    def test_good_queries_include_relocation_migration_search(self) -> None:
+        # Regression test (2026-08-10): 재건축 이주/시설 이전 뉴스를 더 잘
+        # 찾아내기 위해 전용 검색어를 추가했다.
+        self.assertTrue(any("이주" in query and "이전" in query for query in GOOD_QUERIES))
+
+    def test_classify_source_domain_detects_official_and_blog(self) -> None:
+        self.assertEqual(classify_source_domain("https://www.molit.go.kr/notice/1"), "official")
+        self.assertEqual(classify_source_domain("https://blog.naver.com/someone/1"), "blog")
+        self.assertEqual(classify_source_domain("https://cafe.naver.com/room/1"), "blog")
+        self.assertEqual(classify_source_domain("https://www.yna.co.kr/article/1"), "unknown")
+        self.assertEqual(classify_source_domain(None), "unknown")
+
+    def test_apply_source_domain_reliability_boosts_official_source(self) -> None:
+        item = EvidenceItem(
+            title="교통망 확충 고시",
+            summary="국토교통부 고시",
+            source="Naver Web",
+            category="policy",
+            sentiment="positive",
+            url="https://www.molit.go.kr/notice/1",
+            reliability=0.68,
+            impact=2.0,
+        )
+
+        apply_source_domain_reliability(item)
+
+        self.assertGreater(item.reliability, 0.68)
+        self.assertIn("공식출처", item.tags)
+
+    def test_apply_source_domain_reliability_discounts_blog_source(self) -> None:
+        item = EvidenceItem(
+            title="카더라 개발 소식",
+            summary="블로그 글",
+            source="Naver Web",
+            category="policy",
+            sentiment="positive",
+            url="https://blog.naver.com/someone/1",
+            reliability=0.68,
+            impact=2.0,
+        )
+
+        apply_source_domain_reliability(item)
+
+        self.assertLess(item.reliability, 0.68)
+        self.assertIn("블로그출처", item.tags)
 
 
 if __name__ == "__main__":

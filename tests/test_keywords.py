@@ -59,6 +59,23 @@ class KeywordsTests(unittest.TestCase):
     def test_ordinary_sentence_is_not_treated_as_tag_list(self) -> None:
         self.assertFalse(is_tag_list_text("이 지역은 미분양 물량이 늘고 있다는 우려가 나옵니다."))
 
+    def test_relocation_and_migration_keywords_are_positive(self) -> None:
+        # Regression test (2026-08-10 실사용 미팅 피드백): "재건축 이주"나
+        # "시설 이전으로 생기는 부지 개발"처럼 미래 변화를 알리는 기사가
+        # 다른 정비사업 키워드 없이도 최소한 긍정 신호로는 잡혀야 한다.
+        sentiment, tags = classify_sentiment("단지 이주가 다음 달부터 시작됩니다.")
+        self.assertEqual(sentiment, "positive")
+        self.assertIn("이주", tags)
+
+        sentiment, tags = classify_sentiment("운전면허시험장이 다른 지역으로 이전 확정됐습니다.")
+        self.assertEqual(sentiment, "positive")
+        self.assertIn("이전", tags)
+
+    def test_pre_feasibility_study_keyword_is_positive(self) -> None:
+        sentiment, tags = classify_sentiment("해당 노선은 예타를 통과해 사업이 본격화됩니다.")
+        self.assertEqual(sentiment, "positive")
+        self.assertIn("예타", tags)
+
 
 if __name__ == "__main__":
     unittest.main()
