@@ -380,6 +380,46 @@ class RuleEngineTests(unittest.TestCase):
 
         self.assertLess(fuzzy_report.confidence, exact_report.confidence)
 
+    def test_fuzzy_keyword_location_confidence_stays_low_even_with_rich_evidence(self) -> None:
+        # Regression test (2026-08-10, 실제 재현 사례): "군포로 111"은 존재하지
+        # 않는 주소인데도 카카오가 "군포로 109"로 느슨하게 매칭했고, 정책/
+        # 뉴스/생활인프라/실거래가 근거가 28건이나 모이면서 위치 가점을
+        # 낮췄음에도 카테고리 가점 합계만으로 0.9 상한에 도달해 신뢰도가
+        # 여전히 90%로 표시됐다. 근거가 아무리 많아도 느슨한 매칭이면
+        # 신뢰도가 낮은 상한(0.55) 밑으로 유지돼야 한다.
+        from market_agent.models import GeoPoint
+
+        def item(category: str, tag: str) -> EvidenceItem:
+            return EvidenceItem(
+                title=f"{category} 근거",
+                summary="테스트용 근거",
+                source="test",
+                category=category,
+                sentiment="neutral",
+                reliability=0.8,
+                impact=0.0,
+                tags=[tag],
+            )
+
+        rich_evidence = (
+            [item("policy", "정책변수") for _ in range(5)]
+            + [item("news", "뉴스") for _ in range(5)]
+            + [item("amenity", "학교") for _ in range(10)]
+            + [item("market_data", "실거래가") for _ in range(8)]
+        )
+        fuzzy_location = GeoPoint(
+            address="군포로 109 (군포로 111과 다른, 느슨하게 매칭된 주소)",
+            latitude=37.5,
+            longitude=127.0,
+            source="kakao-keyword",
+        )
+
+        report = build_report(
+            address="군포로 111", radius_km=3, location=fuzzy_location, evidence=rich_evidence
+        )
+
+        self.assertLessEqual(report.confidence, 0.55)
+
     def test_signal_rationale_prefers_newer_evidence(self) -> None:
         old_date = format_datetime(datetime(2024, 1, 1, tzinfo=timezone.utc), usegmt=True)
         new_date = format_datetime(datetime(2026, 5, 1, tzinfo=timezone.utc), usegmt=True)

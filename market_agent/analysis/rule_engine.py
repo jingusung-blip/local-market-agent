@@ -233,7 +233,15 @@ def calculate_confidence(evidence: list[EvidenceItem], location: GeoPoint | None
         confidence += 0.15
     if any(item.source == "Demo" for item in evidence):
         confidence -= 0.18
-    return round(max(0.05, min(0.9, confidence)), 2)
+
+    # 2026-08-10 실사용 피드백(2차): 위치 가점만 낮췄더니, 근거가 많은
+    # 케이스(정책+뉴스+생활인프라+실거래가가 다 잡히면 위치 가점과 무관하게
+    # 합계가 이미 0.9 상한을 넘어버려서 느슨한 매칭이어도 그대로 90%로
+    # 찍히는 문제가 재현됨 ("군포로 111"이 존재하지 않아 "군포로 109"로
+    # 추정됐는데도 신뢰도 90%). 근거량이 위치 부정확성을 가려버리지 않도록,
+    # 느슨한 매칭일 때는 신뢰도 자체의 상한선을 낮게 고정한다.
+    ceiling = 0.9 if (location is None or location.source == "kakao") else 0.55
+    return round(max(0.05, min(ceiling, confidence)), 2)
 
 
 def outlook_label(score: int) -> str:
